@@ -1,6 +1,21 @@
-import mongoose, { Document } from 'mongoose';
-export interface IDocument extends Document {
-    owner: mongoose.Types.ObjectId;
+import { Model } from 'sequelize';
+export interface IDocumentAttributes {
+    id?: string;
+    ownerId: string;
+    originalName: string;
+    fileName: string;
+    filePath: string;
+    mimeType: string;
+    size: number;
+    category: 'pdf' | 'image' | 'word' | 'excel' | 'ppt' | 'text' | 'other';
+    tags?: string[];
+    isDeleted?: boolean;
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+export declare class Document extends Model<IDocumentAttributes> implements IDocumentAttributes {
+    id: string;
+    ownerId: string;
     originalName: string;
     fileName: string;
     filePath: string;
@@ -9,13 +24,10 @@ export interface IDocument extends Document {
     category: 'pdf' | 'image' | 'word' | 'excel' | 'ppt' | 'text' | 'other';
     tags: string[];
     isDeleted: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+    get _id(): string;
+    get owner(): string;
 }
-declare const _default: mongoose.Model<IDocument, {}, {}, {}, mongoose.Document<unknown, {}, IDocument, {}, {}> & IDocument & Required<{
-    _id: mongoose.Types.ObjectId;
-}> & {
-    __v: number;
-}, any>;
-export default _default;
+export default Document;
 //# sourceMappingURL=Document.d.ts.map

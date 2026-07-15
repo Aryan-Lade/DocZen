@@ -79,7 +79,7 @@ export const mergePDFs = async (req: AuthRequest, res: Response, next: NextFunct
     const outPath = await savePDF(merged, 'merged');
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'PDF Merge',
       fileName: `merged_${files.length}_files.pdf`,
       status: 'success',
@@ -148,7 +148,7 @@ export const splitPDF = async (req: AuthRequest, res: Response, next: NextFuncti
     }
 
     if (outPaths.length === 1) {
-      await ActivityModel.create({ user: req.user._id, operation: 'PDF Split', fileName: req.file.originalname, status: 'success' });
+      await ActivityModel.create({ userId: req.user.id, operation: 'PDF Split', fileName: req.file.originalname, status: 'success' });
       res.download(outPaths[0], 'split.pdf', () => {
         fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
         fs.existsSync(outPaths[0]) && fs.unlinkSync(outPaths[0]);
@@ -202,7 +202,7 @@ export const compressPDF = async (req: AuthRequest, res: Response, next: NextFun
         }
       }
 
-      await ActivityModel.create({ user: req.user._id, operation: 'PDF Compress', fileName: req.file!.originalname, status: 'success' });
+      await ActivityModel.create({ userId: req.user.id, operation: 'PDF Compress', fileName: req.file!.originalname, status: 'success' });
 
       res.download(outPath, 'compressed.pdf', () => {
         fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -243,7 +243,7 @@ export const protectPDF = async (req: AuthRequest, res: Response, next: NextFunc
         });
       }
 
-      await ActivityModel.create({ user: req.user._id, operation: 'PDF Protect', fileName: req.file!.originalname, status: 'success' });
+      await ActivityModel.create({ userId: req.user.id, operation: 'PDF Protect', fileName: req.file!.originalname, status: 'success' });
 
       res.download(outPath, 'protected.pdf', () => {
         fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -267,7 +267,7 @@ export const unlockPDF = async (req: AuthRequest, res: Response, next: NextFunct
     const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
     const outPath = await savePDF(pdfDoc, 'unlocked');
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Unlock', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Unlock', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'unlocked.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -314,7 +314,7 @@ export const reorderPDF = async (req: AuthRequest, res: Response, next: NextFunc
 
     const outPath = await savePDF(newPdf, 'reordered');
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Reorder', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Reorder', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'reordered.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -362,7 +362,7 @@ export const rotatePDF = async (req: AuthRequest, res: Response, next: NextFunct
 
     const outPath = await savePDF(pdfDoc, 'rotated');
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Rotate', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Rotate', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'rotated.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -432,7 +432,7 @@ export const addWatermark = async (req: AuthRequest, res: Response, next: NextFu
 
     const outPath = await savePDF(pdfDoc, 'watermarked');
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Watermark', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Watermark', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'watermarked.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -486,7 +486,7 @@ export const addPageNumbers = async (req: AuthRequest, res: Response, next: Next
 
     const outPath = await savePDF(pdfDoc, 'numbered');
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Page Numbers', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Page Numbers', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'numbered.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);

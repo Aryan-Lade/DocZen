@@ -1,65 +1,96 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = __importStar(require("mongoose"));
+exports.User = void 0;
+const sequelize_1 = require("sequelize");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const UserSchema = new mongoose_1.Schema({
-    name: { type: String, required: true, trim: true, maxlength: 100 },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6, select: false },
-    avatar: { type: String, default: null },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    storageUsed: { type: Number, default: 0 },
-    storageLimit: { type: Number, default: 1024 * 1024 * 1024 }, // 1GB default
-    resetPasswordToken: { type: String },
-    resetPasswordExpire: { type: Date },
-}, { timestamps: true });
-// Hash password before saving
-UserSchema.pre('save', async function (next) {
-    if (!this.isModified('password'))
-        return next();
-    const salt = await bcryptjs_1.default.genSalt(12);
-    this.password = await bcryptjs_1.default.hash(this.password, salt);
-    next();
+const db_1 = __importDefault(require("../config/db"));
+class User extends sequelize_1.Model {
+    // Compatibility getter
+    get _id() {
+        return this.id;
+    }
+    // Instance method: compare password
+    async comparePassword(candidatePassword) {
+        return bcryptjs_1.default.compare(candidatePassword, this.password);
+    }
+}
+exports.User = User;
+User.init({
+    id: {
+        type: sequelize_1.DataTypes.UUID,
+        defaultValue: sequelize_1.DataTypes.UUIDV4,
+        primaryKey: true,
+    },
+    name: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: false,
+    },
+    email: {
+        type: sequelize_1.DataTypes.STRING(255),
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true,
+        },
+    },
+    password: {
+        type: sequelize_1.DataTypes.STRING(255),
+        allowNull: false,
+    },
+    avatar: {
+        type: sequelize_1.DataTypes.STRING(255),
+        allowNull: true,
+        defaultValue: null,
+    },
+    role: {
+        type: sequelize_1.DataTypes.ENUM('user', 'admin'),
+        allowNull: false,
+        defaultValue: 'user',
+    },
+    storageUsed: {
+        type: sequelize_1.DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+    },
+    storageLimit: {
+        type: sequelize_1.DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 1024 * 1024 * 1024, // 1GB
+    },
+    resetPasswordToken: {
+        type: sequelize_1.DataTypes.STRING(255),
+        allowNull: true,
+        defaultValue: null,
+    },
+    resetPasswordExpire: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null,
+    },
+}, {
+    sequelize: db_1.default,
+    modelName: 'User',
+    tableName: 'users',
+    timestamps: true,
+    defaultScope: {
+        attributes: { exclude: ['password'] },
+    },
+    scopes: {
+        withPassword: {
+            attributes: { include: ['password'] },
+        },
+    },
+    hooks: {
+        beforeSave: async (user) => {
+            if (user.changed('password')) {
+                const salt = await bcryptjs_1.default.genSalt(12);
+                user.password = await bcryptjs_1.default.hash(user.password, salt);
+            }
+        },
+    },
 });
-// Compare passwords
-UserSchema.methods.comparePassword = async function (candidatePassword) {
-    return bcryptjs_1.default.compare(candidatePassword, this.password);
-};
-exports.default = mongoose_1.default.model('User', UserSchema);
+exports.default = User;
 //# sourceMappingURL=User.js.map

@@ -1,17 +1,26 @@
-import mongoose, { Document } from 'mongoose';
-export interface IActivity extends Document {
-    user: mongoose.Types.ObjectId;
+import { Model } from 'sequelize';
+export interface IActivityAttributes {
+    id?: string;
+    userId: string;
+    operation: string;
+    fileName: string;
+    status?: 'success' | 'failed' | 'pending';
+    details?: string | null;
+    fileSize?: number | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+export declare class Activity extends Model<IActivityAttributes> implements IActivityAttributes {
+    id: string;
+    userId: string;
     operation: string;
     fileName: string;
     status: 'success' | 'failed' | 'pending';
-    details?: string;
-    fileSize?: number;
-    createdAt: Date;
+    details: string | null;
+    fileSize: number | null;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+    get _id(): string;
 }
-declare const _default: mongoose.Model<IActivity, {}, {}, {}, mongoose.Document<unknown, {}, IActivity, {}, {}> & IActivity & Required<{
-    _id: mongoose.Types.ObjectId;
-}> & {
-    __v: number;
-}, any>;
-export default _default;
+export default Activity;
 //# sourceMappingURL=Activity.d.ts.map

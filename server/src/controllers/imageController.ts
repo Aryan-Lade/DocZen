@@ -27,7 +27,7 @@ export const compressImage = async (req: AuthRequest, res: Response, next: NextF
       .toFile(outPath);
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'Image Compress',
       fileName: req.file.originalname,
       status: 'success',
@@ -64,7 +64,7 @@ export const convertImage = async (req: AuthRequest, res: Response, next: NextFu
       .toFile(outPath);
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'Image Convert',
       fileName: req.file.originalname,
       status: 'success',
@@ -131,7 +131,7 @@ export const pdfToImage = async (req: AuthRequest, res: Response, next: NextFunc
         }
 
         await ActivityModel.create({
-          user: req.user._id,
+          userId: req.user.id,
           operation: 'PDF to Image',
           fileName: req.file!.originalname,
           status: 'success',

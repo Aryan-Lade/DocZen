@@ -25,7 +25,7 @@ export const extractText = async (req: AuthRequest, res: Response, next: NextFun
     const confidence = result.data.confidence;
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'OCR Extract',
       fileName: req.file.originalname,
       status: 'success',

@@ -64,7 +64,7 @@ const textToPdf = async (req, res, next) => {
         const bytes = await textToPdfBytes(text);
         const outPath = path_1.default.join(upload_1.UPLOADS_PATH, `converted_${(0, uuid_1.v4)()}.pdf`);
         fs_1.default.writeFileSync(outPath, bytes);
-        await Activity_1.default.create({ user: req.user._id, operation: 'Text to PDF', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'Text to PDF', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'converted.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -97,7 +97,7 @@ const officeToPdf = async (req, res, next) => {
             }
             const baseName = path_1.default.basename(inputPath, path_1.default.extname(inputPath));
             const outPath = path_1.default.join(upload_1.UPLOADS_PATH, `${baseName}.pdf`);
-            await Activity_1.default.create({ user: req.user._id, operation: 'Office to PDF', fileName: req.file.originalname, status: 'success' });
+            await Activity_1.default.create({ userId: req.user.id, operation: 'Office to PDF', fileName: req.file.originalname, status: 'success' });
             res.download(outPath, 'converted.pdf', () => {
                 fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
                 fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -123,7 +123,7 @@ const htmlToPdf = async (req, res, next) => {
         const bytes = await textToPdfBytes(textContent);
         const outPath = path_1.default.join(upload_1.UPLOADS_PATH, `converted_${(0, uuid_1.v4)()}.pdf`);
         fs_1.default.writeFileSync(outPath, bytes);
-        await Activity_1.default.create({ user: req.user._id, operation: 'HTML to PDF', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'HTML to PDF', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'converted.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);

@@ -74,7 +74,7 @@ const mergePDFs = async (req, res, next) => {
         }
         const outPath = await savePDF(merged, 'merged');
         await Activity_1.default.create({
-            user: req.user._id,
+            userId: req.user.id,
             operation: 'PDF Merge',
             fileName: `merged_${files.length}_files.pdf`,
             status: 'success',
@@ -139,7 +139,7 @@ const splitPDF = async (req, res, next) => {
             outPaths.push(await savePDF(newPdf, 'split'));
         }
         if (outPaths.length === 1) {
-            await Activity_1.default.create({ user: req.user._id, operation: 'PDF Split', fileName: req.file.originalname, status: 'success' });
+            await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Split', fileName: req.file.originalname, status: 'success' });
             res.download(outPaths[0], 'split.pdf', () => {
                 fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
                 fs_1.default.existsSync(outPaths[0]) && fs_1.default.unlinkSync(outPaths[0]);
@@ -191,7 +191,7 @@ const compressPDF = async (req, res, next) => {
                     });
                 }
             }
-            await Activity_1.default.create({ user: req.user._id, operation: 'PDF Compress', fileName: req.file.originalname, status: 'success' });
+            await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Compress', fileName: req.file.originalname, status: 'success' });
             res.download(outPath, 'compressed.pdf', () => {
                 fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
                 fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -229,7 +229,7 @@ const protectPDF = async (req, res, next) => {
                     error: stderr || error.message,
                 });
             }
-            await Activity_1.default.create({ user: req.user._id, operation: 'PDF Protect', fileName: req.file.originalname, status: 'success' });
+            await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Protect', fileName: req.file.originalname, status: 'success' });
             res.download(outPath, 'protected.pdf', () => {
                 fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
                 fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -252,7 +252,7 @@ const unlockPDF = async (req, res, next) => {
         const bytes = fs_1.default.readFileSync(inputPath);
         const pdfDoc = await pdf_lib_1.PDFDocument.load(bytes, { ignoreEncryption: true });
         const outPath = await savePDF(pdfDoc, 'unlocked');
-        await Activity_1.default.create({ user: req.user._id, operation: 'PDF Unlock', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Unlock', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'unlocked.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -296,7 +296,7 @@ const reorderPDF = async (req, res, next) => {
         const copied = await newPdf.copyPages(srcPdf, pageOrder);
         copied.forEach((page) => newPdf.addPage(page));
         const outPath = await savePDF(newPdf, 'reordered');
-        await Activity_1.default.create({ user: req.user._id, operation: 'PDF Reorder', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Reorder', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'reordered.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -340,7 +340,7 @@ const rotatePDF = async (req, res, next) => {
             page.setRotation((0, pdf_lib_1.degrees)((currentAngle + rotationAngle) % 360));
         });
         const outPath = await savePDF(pdfDoc, 'rotated');
-        await Activity_1.default.create({ user: req.user._id, operation: 'PDF Rotate', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Rotate', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'rotated.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -407,7 +407,7 @@ const addWatermark = async (req, res, next) => {
             });
         });
         const outPath = await savePDF(pdfDoc, 'watermarked');
-        await Activity_1.default.create({ user: req.user._id, operation: 'PDF Watermark', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Watermark', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'watermarked.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);
@@ -464,7 +464,7 @@ const addPageNumbers = async (req, res, next) => {
             page.drawText(text, { x, y, size: parsedFontSize, font, color: (0, pdf_lib_1.rgb)(r, g, b) });
         });
         const outPath = await savePDF(pdfDoc, 'numbered');
-        await Activity_1.default.create({ user: req.user._id, operation: 'PDF Page Numbers', fileName: req.file.originalname, status: 'success' });
+        await Activity_1.default.create({ userId: req.user.id, operation: 'PDF Page Numbers', fileName: req.file.originalname, status: 'success' });
         res.download(outPath, 'numbered.pdf', () => {
             fs_1.default.existsSync(inputPath) && fs_1.default.unlinkSync(inputPath);
             fs_1.default.existsSync(outPath) && fs_1.default.unlinkSync(outPath);

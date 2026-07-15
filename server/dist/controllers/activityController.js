@@ -10,11 +10,13 @@ const Activity_1 = __importDefault(require("../models/Activity"));
 const getActivity = async (req, res, next) => {
     try {
         const { page = 1, limit = 20 } = req.query;
-        const activities = await Activity_1.default.find({ user: req.user._id })
-            .sort('-createdAt')
-            .skip((+page - 1) * +limit)
-            .limit(+limit);
-        const total = await Activity_1.default.countDocuments({ user: req.user._id });
+        const activities = await Activity_1.default.findAll({
+            where: { userId: req.user.id },
+            order: [['createdAt', 'DESC']],
+            offset: (+page - 1) * +limit,
+            limit: +limit,
+        });
+        const total = await Activity_1.default.count({ where: { userId: req.user.id } });
         res.json({
             success: true,
             activities,
@@ -32,7 +34,7 @@ exports.getActivity = getActivity;
 // @route DELETE /api/activity
 const clearActivity = async (req, res, next) => {
     try {
-        await Activity_1.default.deleteMany({ user: req.user._id });
+        await Activity_1.default.destroy({ where: { userId: req.user.id } });
         res.json({ success: true, message: 'Activity log cleared' });
     }
     catch (error) {

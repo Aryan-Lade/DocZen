@@ -9,7 +9,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
-const db_1 = __importDefault(require("./config/db"));
+const db_1 = require("./config/db");
 const error_1 = require("./middlewares/error");
 const rateLimiter_1 = require("./middlewares/rateLimiter");
 const auth_1 = __importDefault(require("./routes/auth"));
@@ -23,7 +23,7 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 // Connect Database
-(0, db_1.default)();
+(0, db_1.connectDB)();
 // Security Middlewares
 app.use((0, helmet_1.default)({
     crossOriginResourcePolicy: { policy: 'cross-origin' },

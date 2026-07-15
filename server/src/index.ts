@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 
-import connectDB from './config/db';
+import { connectDB } from './config/db';
 import { errorHandler, notFound } from './middlewares/error';
 import { globalLimiter } from './middlewares/rateLimiter';
 

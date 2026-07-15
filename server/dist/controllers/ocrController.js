@@ -25,7 +25,7 @@ const extractText = async (req, res, next) => {
         const extractedText = result.data.text;
         const confidence = result.data.confidence;
         await Activity_1.default.create({
-            user: req.user._id,
+            userId: req.user.id,
             operation: 'OCR Extract',
             fileName: req.file.originalname,
             status: 'success',

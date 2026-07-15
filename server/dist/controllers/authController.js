@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAccount = exports.resetPassword = exports.forgotPassword = exports.changePassword = exports.updateProfile = exports.getMe = exports.login = exports.register = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const crypto_1 = __importDefault(require("crypto"));
+const sequelize_1 = require("sequelize");
 const User_1 = __importDefault(require("../models/User"));
 const error_1 = require("../middlewares/error");
 const generateToken = (id) => {
@@ -18,18 +19,18 @@ const generateToken = (id) => {
 const register = async (req, res, next) => {
     try {
         const { name, email, password } = req.body;
-        const existingUser = await User_1.default.findOne({ email });
+        const existingUser = await User_1.default.findOne({ where: { email } });
         if (existingUser) {
             return next((0, error_1.createError)('Email already registered', 400));
         }
         const user = await User_1.default.create({ name, email, password });
-        const token = generateToken(String(user._id));
+        const token = generateToken(String(user.id));
         res.status(201).json({
             success: true,
             message: 'Account created successfully',
             token,
             user: {
-                id: user._id,
+                id: user.id,
                 name: user.name,
                 email: user.email,
                 role: user.role,
@@ -49,17 +50,17 @@ exports.register = register;
 const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
-        const user = await User_1.default.findOne({ email }).select('+password');
+        const user = await User_1.default.scope('withPassword').findOne({ where: { email } });
         if (!user || !(await user.comparePassword(password))) {
             return next((0, error_1.createError)('Invalid email or password', 401));
         }
-        const token = generateToken(String(user._id));
+        const token = generateToken(String(user.id));
         res.json({
             success: true,
             message: 'Login successful',
             token,
             user: {
-                id: user._id,
+                id: user.id,
                 name: user.name,
                 email: user.email,
                 role: user.role,
@@ -79,7 +80,7 @@ exports.login = login;
 // @route   GET /api/auth/me
 const getMe = async (req, res, next) => {
     try {
-        const user = await User_1.default.findById(req.user._id);
+        const user = await User_1.default.findByPk(req.user.id);
         res.json({ success: true, user });
     }
     catch (error) {
@@ -92,7 +93,11 @@ exports.getMe = getMe;
 const updateProfile = async (req, res, next) => {
     try {
         const { name, avatar } = req.body;
-        const user = await User_1.default.findByIdAndUpdate(req.user._id, { name, avatar }, { new: true, runValidators: true });
+        const user = await User_1.default.findByPk(req.user.id);
+        if (!user) {
+            return next((0, error_1.createError)('User not found', 404));
+        }
+        await user.update({ name, avatar });
         res.json({ success: true, message: 'Profile updated', user });
     }
     catch (error) {
@@ -105,7 +110,7 @@ exports.updateProfile = updateProfile;
 const changePassword = async (req, res, next) => {
     try {
         const { currentPassword, newPassword } = req.body;
-        const user = await User_1.default.findById(req.user._id).select('+password');
+        const user = await User_1.default.scope('withPassword').findByPk(req.user.id);
         if (!user || !(await user.comparePassword(currentPassword))) {
             return next((0, error_1.createError)('Current password is incorrect', 400));
         }
@@ -122,7 +127,7 @@ exports.changePassword = changePassword;
 // @route   POST /api/auth/forgot-password
 const forgotPassword = async (req, res, next) => {
     try {
-        const user = await User_1.default.findOne({ email: req.body.email });
+        const user = await User_1.default.findOne({ where: { email: req.body.email } });
         if (!user) {
             return next((0, error_1.createError)('No account found with that email', 404));
         }
@@ -148,17 +153,19 @@ const resetPassword = async (req, res, next) => {
     try {
         const hashedToken = crypto_1.default.createHash('sha256').update(req.params.token).digest('hex');
         const user = await User_1.default.findOne({
-            resetPasswordToken: hashedToken,
-            resetPasswordExpire: { $gt: Date.now() },
+            where: {
+                resetPasswordToken: hashedToken,
+                resetPasswordExpire: { [sequelize_1.Op.gt]: new Date() },
+            },
         });
         if (!user) {
             return next((0, error_1.createError)('Invalid or expired reset token', 400));
         }
         user.password = req.body.password;
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpire = undefined;
+        user.resetPasswordToken = null;
+        user.resetPasswordExpire = null;
         await user.save();
-        const token = generateToken(String(user._id));
+        const token = generateToken(String(user.id));
         res.json({ success: true, message: 'Password reset successful', token });
     }
     catch (error) {
@@ -170,7 +177,10 @@ exports.resetPassword = resetPassword;
 // @route   DELETE /api/auth/account
 const deleteAccount = async (req, res, next) => {
     try {
-        await User_1.default.findByIdAndDelete(req.user._id);
+        const user = await User_1.default.findByPk(req.user.id);
+        if (user) {
+            await user.destroy();
+        }
         res.json({ success: true, message: 'Account deleted successfully' });
     }
     catch (error) {

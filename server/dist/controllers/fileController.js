@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getStats = exports.downloadFile = exports.deleteFile = exports.renameFile = exports.getFile = exports.getFiles = exports.uploadFile = void 0;
 const fs_1 = __importDefault(require("fs"));
+const sequelize_1 = require("sequelize");
+const db_1 = __importDefault(require("../config/db"));
 const Document_1 = __importDefault(require("../models/Document"));
 const Activity_1 = __importDefault(require("../models/Activity"));
 const User_1 = __importDefault(require("../models/User"));
@@ -36,18 +38,20 @@ const uploadFile = async (req, res, next) => {
         let totalSize = 0;
         for (const file of files) {
             const doc = await Document_1.default.create({
-                owner: req.user._id,
+                ownerId: req.user.id,
                 originalName: file.originalname,
                 fileName: file.filename,
                 filePath: file.path,
                 mimeType: file.mimetype,
                 size: file.size,
                 category: getMimeCategory(file.mimetype),
+                tags: [],
+                isDeleted: false,
             });
             savedDocs.push(doc);
             totalSize += file.size;
             await Activity_1.default.create({
-                user: req.user._id,
+                userId: req.user.id,
                 operation: 'File Upload',
                 fileName: file.originalname,
                 status: 'success',
@@ -55,7 +59,10 @@ const uploadFile = async (req, res, next) => {
             });
         }
         // Update user storage
-        await User_1.default.findByIdAndUpdate(req.user._id, { $inc: { storageUsed: totalSize } });
+        const user = await User_1.default.findByPk(req.user.id);
+        if (user) {
+            await user.increment('storageUsed', { by: totalSize });
+        }
         res.status(201).json({ success: true, message: 'Files uploaded successfully', files: savedDocs });
     }
     catch (error) {
@@ -68,16 +75,33 @@ exports.uploadFile = uploadFile;
 const getFiles = async (req, res, next) => {
     try {
         const { search, category, sort = '-createdAt', page = 1, limit = 20 } = req.query;
-        const query = { owner: req.user._id, isDeleted: false };
-        if (search)
-            query.$text = { $search: search };
-        if (category)
-            query.category = category;
-        const files = await Document_1.default.find(query)
-            .sort(sort)
-            .skip((+page - 1) * +limit)
-            .limit(+limit);
-        const total = await Document_1.default.countDocuments(query);
+        const whereClause = { ownerId: req.user.id, isDeleted: false };
+        if (search) {
+            whereClause.originalName = { [sequelize_1.Op.like]: `%${search}%` };
+        }
+        if (category) {
+            whereClause.category = category;
+        }
+        let sortField = 'createdAt';
+        let sortOrder = 'DESC';
+        if (sort) {
+            const sortStr = sort;
+            if (sortStr.startsWith('-')) {
+                sortField = sortStr.substring(1);
+                sortOrder = 'DESC';
+            }
+            else {
+                sortField = sortStr;
+                sortOrder = 'ASC';
+            }
+        }
+        const files = await Document_1.default.findAll({
+            where: whereClause,
+            order: [[sortField, sortOrder]],
+            offset: (+page - 1) * +limit,
+            limit: +limit,
+        });
+        const total = await Document_1.default.count({ where: whereClause });
         res.json({ success: true, files, total, page: +page, pages: Math.ceil(total / +limit) });
     }
     catch (error) {
@@ -89,7 +113,9 @@ exports.getFiles = getFiles;
 // @route GET /api/files/:id
 const getFile = async (req, res, next) => {
     try {
-        const file = await Document_1.default.findOne({ _id: req.params.id, owner: req.user._id, isDeleted: false });
+        const file = await Document_1.default.findOne({
+            where: { id: req.params.id, ownerId: req.user.id, isDeleted: false }
+        });
         if (!file)
             return next((0, error_1.createError)('File not found', 404));
         res.json({ success: true, file });
@@ -104,9 +130,12 @@ exports.getFile = getFile;
 const renameFile = async (req, res, next) => {
     try {
         const { name } = req.body;
-        const file = await Document_1.default.findOneAndUpdate({ _id: req.params.id, owner: req.user._id }, { originalName: name }, { new: true });
+        const file = await Document_1.default.findOne({
+            where: { id: req.params.id, ownerId: req.user.id }
+        });
         if (!file)
             return next((0, error_1.createError)('File not found', 404));
+        await file.update({ originalName: name });
         res.json({ success: true, message: 'File renamed', file });
     }
     catch (error) {
@@ -114,23 +143,30 @@ const renameFile = async (req, res, next) => {
     }
 };
 exports.renameFile = renameFile;
-// @desc  Delete file (soft delete)
+// @desc  Delete file (hard delete)
 // @route DELETE /api/files/:id
 const deleteFile = async (req, res, next) => {
     try {
-        const file = await Document_1.default.findOne({ _id: req.params.id, owner: req.user._id });
+        const file = await Document_1.default.findOne({
+            where: { id: req.params.id, ownerId: req.user.id }
+        });
         if (!file)
             return next((0, error_1.createError)('File not found', 404));
         // Hard delete from disk
         if (fs_1.default.existsSync(file.filePath)) {
             fs_1.default.unlinkSync(file.filePath);
         }
-        await Document_1.default.findByIdAndDelete(file._id);
-        await User_1.default.findByIdAndUpdate(req.user._id, { $inc: { storageUsed: -file.size } });
+        const fileSize = file.size;
+        const fileName = file.originalName;
+        await file.destroy();
+        const user = await User_1.default.findByPk(req.user.id);
+        if (user) {
+            await user.decrement('storageUsed', { by: fileSize });
+        }
         await Activity_1.default.create({
-            user: req.user._id,
+            userId: req.user.id,
             operation: 'File Delete',
-            fileName: file.originalName,
+            fileName: fileName,
             status: 'success',
         });
         res.json({ success: true, message: 'File deleted' });
@@ -144,7 +180,9 @@ exports.deleteFile = deleteFile;
 // @route GET /api/files/:id/download
 const downloadFile = async (req, res, next) => {
     try {
-        const file = await Document_1.default.findOne({ _id: req.params.id, owner: req.user._id, isDeleted: false });
+        const file = await Document_1.default.findOne({
+            where: { id: req.params.id, ownerId: req.user.id, isDeleted: false }
+        });
         if (!file)
             return next((0, error_1.createError)('File not found', 404));
         if (!fs_1.default.existsSync(file.filePath)) {
@@ -161,16 +199,25 @@ exports.downloadFile = downloadFile;
 // @route GET /api/files/stats
 const getStats = async (req, res, next) => {
     try {
-        const userId = req.user._id;
+        const userId = req.user.id;
         const [totalFiles, recentDocs, user] = await Promise.all([
-            Document_1.default.countDocuments({ owner: userId, isDeleted: false }),
-            Document_1.default.find({ owner: userId, isDeleted: false }).sort('-createdAt').limit(5),
-            User_1.default.findById(userId),
+            Document_1.default.count({ where: { ownerId: userId, isDeleted: false } }),
+            Document_1.default.findAll({
+                where: { ownerId: userId, isDeleted: false },
+                order: [['createdAt', 'DESC']],
+                limit: 5,
+            }),
+            User_1.default.findByPk(userId),
         ]);
-        const categoryBreakdown = await Document_1.default.aggregate([
-            { $match: { owner: userId, isDeleted: false } },
-            { $group: { _id: '$category', count: { $sum: 1 }, totalSize: { $sum: '$size' } } },
-        ]);
+        const categoryBreakdown = await Document_1.default.findAll({
+            attributes: [
+                'category',
+                [db_1.default.fn('COUNT', db_1.default.col('id')), 'count'],
+                [db_1.default.fn('SUM', db_1.default.col('size')), 'totalSize'],
+            ],
+            where: { ownerId: userId, isDeleted: false },
+            group: ['category'],
+        });
         res.json({
             success: true,
             stats: {

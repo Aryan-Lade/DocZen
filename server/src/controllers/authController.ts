@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { Op } from 'sequelize';
 import User from '../models/User';
 import { createError } from '../middlewares/error';
 import { AuthRequest } from '../middlewares/auth';
@@ -17,20 +18,20 @@ export const register = async (req: Request, res: Response, next: NextFunction):
   try {
     const { name, email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return next(createError('Email already registered', 400));
     }
 
     const user = await User.create({ name, email, password });
-    const token = generateToken(String(user._id));
+    const token = generateToken(String(user.id));
 
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -50,19 +51,19 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.scope('withPassword').findOne({ where: { email } });
     if (!user || !(await user.comparePassword(password))) {
       return next(createError('Invalid email or password', 401));
     }
 
-    const token = generateToken(String(user._id));
+    const token = generateToken(String(user.id));
 
     res.json({
       success: true,
       message: 'Login successful',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -81,7 +82,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 // @route   GET /api/auth/me
 export const getMe = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findByPk(req.user.id);
     res.json({ success: true, user });
   } catch (error) {
     next(error);
@@ -93,11 +94,11 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { name, avatar } = req.body;
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { name, avatar },
-      { new: true, runValidators: true }
-    );
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return next(createError('User not found', 404));
+    }
+    await user.update({ name, avatar });
     res.json({ success: true, message: 'Profile updated', user });
   } catch (error) {
     next(error);
@@ -110,7 +111,7 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
   try {
     const { currentPassword, newPassword } = req.body;
 
-    const user = await User.findById(req.user._id).select('+password');
+    const user = await User.scope('withPassword').findByPk(req.user.id);
     if (!user || !(await user.comparePassword(currentPassword))) {
       return next(createError('Current password is incorrect', 400));
     }
@@ -128,7 +129,7 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
 // @route   POST /api/auth/forgot-password
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const user = await User.findOne({ email: req.body.email });
+    const user = await User.findOne({ where: { email: req.body.email } });
     if (!user) {
       return next(createError('No account found with that email', 404));
     }
@@ -156,8 +157,10 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
 
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpire: { $gt: Date.now() },
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpire: { [Op.gt]: new Date() },
+      },
     });
 
     if (!user) {
@@ -165,11 +168,11 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     }
 
     user.password = req.body.password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpire = null;
     await user.save();
 
-    const token = generateToken(String(user._id));
+    const token = generateToken(String(user.id));
     res.json({ success: true, message: 'Password reset successful', token });
   } catch (error) {
     next(error);
@@ -180,7 +183,10 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 // @route   DELETE /api/auth/account
 export const deleteAccount = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    await User.findByIdAndDelete(req.user._id);
+    const user = await User.findByPk(req.user.id);
+    if (user) {
+      await user.destroy();
+    }
     res.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
     next(error);

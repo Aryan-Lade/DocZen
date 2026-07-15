@@ -27,7 +27,7 @@ const compressImage = async (req, res, next) => {
             .jpeg({ quality: q })
             .toFile(outPath);
         await Activity_1.default.create({
-            user: req.user._id,
+            userId: req.user.id,
             operation: 'Image Compress',
             fileName: req.file.originalname,
             status: 'success',
@@ -61,7 +61,7 @@ const convertImage = async (req, res, next) => {
             .toFormat(format.toLowerCase())
             .toFile(outPath);
         await Activity_1.default.create({
-            user: req.user._id,
+            userId: req.user.id,
             operation: 'Image Convert',
             fileName: req.file.originalname,
             status: 'success',
@@ -122,7 +122,7 @@ const pdfToImage = async (req, res, next) => {
                     });
                 }
                 await Activity_1.default.create({
-                    user: req.user._id,
+                    userId: req.user.id,
                     operation: 'PDF to Image',
                     fileName: req.file.originalname,
                     status: 'success',

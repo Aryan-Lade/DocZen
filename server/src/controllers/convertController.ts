@@ -65,7 +65,7 @@ export const textToPdf = async (req: AuthRequest, res: Response, next: NextFunct
     const outPath = path.join(UPLOADS_PATH, `converted_${uuidv4()}.pdf`);
     fs.writeFileSync(outPath, bytes);
 
-    await ActivityModel.create({ user: req.user._id, operation: 'Text to PDF', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'Text to PDF', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'converted.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -102,7 +102,7 @@ export const officeToPdf = async (req: AuthRequest, res: Response, next: NextFun
       const baseName = path.basename(inputPath, path.extname(inputPath));
       const outPath = path.join(UPLOADS_PATH, `${baseName}.pdf`);
 
-      await ActivityModel.create({ user: req.user._id, operation: 'Office to PDF', fileName: req.file!.originalname, status: 'success' });
+      await ActivityModel.create({ userId: req.user.id, operation: 'Office to PDF', fileName: req.file!.originalname, status: 'success' });
 
       res.download(outPath, 'converted.pdf', () => {
         fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -130,7 +130,7 @@ export const htmlToPdf = async (req: AuthRequest, res: Response, next: NextFunct
     const outPath = path.join(UPLOADS_PATH, `converted_${uuidv4()}.pdf`);
     fs.writeFileSync(outPath, bytes);
 
-    await ActivityModel.create({ user: req.user._id, operation: 'HTML to PDF', fileName: req.file.originalname, status: 'success' });
+    await ActivityModel.create({ userId: req.user.id, operation: 'HTML to PDF', fileName: req.file.originalname, status: 'success' });
 
     res.download(outPath, 'converted.pdf', () => {
       fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
