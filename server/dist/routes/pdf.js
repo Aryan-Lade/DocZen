@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const pdfController_1 = require("../controllers/pdfController");
+const auth_1 = require("../middlewares/auth");
+const upload_1 = require("../middlewares/upload");
+const rateLimiter_1 = require("../middlewares/rateLimiter");
+const router = (0, express_1.Router)();
+router.use(auth_1.protect, rateLimiter_1.uploadLimiter);
+router.post('/merge', upload_1.upload.array('files', 20), pdfController_1.mergePDFs);
+router.post('/split', upload_1.upload.single('file'), pdfController_1.splitPDF);
+router.post('/compress', upload_1.upload.single('file'), pdfController_1.compressPDF);
+router.post('/protect', upload_1.upload.single('file'), pdfController_1.protectPDF);
+router.post('/unlock', upload_1.upload.single('file'), pdfController_1.unlockPDF);
+router.post('/reorder', upload_1.upload.single('file'), pdfController_1.reorderPDF);
+router.post('/rotate', upload_1.upload.single('file'), pdfController_1.rotatePDF);
+router.post('/watermark', upload_1.upload.single('file'), pdfController_1.addWatermark);
+router.post('/number-pages', upload_1.upload.single('file'), pdfController_1.addPageNumbers);
+exports.default = router;
+//# sourceMappingURL=pdf.js.map

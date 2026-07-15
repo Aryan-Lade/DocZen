@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { PDFDocument, degrees, rgb, StandardFonts, PageSizes } from 'pdf-lib';
+import { PDFDocument, degrees, rgb, StandardFonts } from 'pdf-lib';
 import { AuthRequest } from '../middlewares/auth';
 import { createError } from '../middlewares/error';
 import { UPLOADS_PATH } from '../middlewares/upload';
@@ -15,6 +15,28 @@ const savePDF = async (pdfDoc: PDFDocument, prefix: string): Promise<string> => 
   const outPath = path.join(UPLOADS_PATH, outFile);
   fs.writeFileSync(outPath, bytes);
   return outPath;
+};
+
+// Helper: parse hex color safely
+const parseHexColor = (hex: string): { r: number; g: number; b: number } => {
+  const defaultColor = { r: 0, g: 0, b: 0 }; // black fallback
+  if (!hex || typeof hex !== 'string') return defaultColor;
+  
+  let cleanHex = hex.trim().replace(/^#/, '');
+  
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map(char => char + char).join('');
+  }
+  
+  if (cleanHex.length !== 6) return defaultColor;
+  
+  const r = parseInt(cleanHex.slice(0, 2), 16);
+  const g = parseInt(cleanHex.slice(2, 4), 16);
+  const b = parseInt(cleanHex.slice(4, 6), 16);
+  
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor;
+  
+  return { r: r / 255, g: g / 255, b: b / 255 };
 };
 
 // @desc  Merge PDFs
@@ -31,8 +53,19 @@ export const mergePDFs = async (req: AuthRequest, res: Response, next: NextFunct
     // Support order from body
     let orderedFiles = files;
     if (req.body.order) {
-      const order: number[] = JSON.parse(req.body.order);
-      orderedFiles = order.map((i) => files[i]);
+      try {
+        const order: number[] = JSON.parse(req.body.order);
+        orderedFiles = order.map((i) => {
+          const idx = parseInt(i as any);
+          if (isNaN(idx) || idx < 0 || idx >= files.length) {
+            throw new Error(`Invalid file index ${idx}`);
+          }
+          return files[idx];
+        });
+      } catch (err: any) {
+        files.forEach((file) => fs.existsSync(file.path) && fs.unlinkSync(file.path));
+        return next(createError(err.message || 'Invalid file order JSON format', 400));
+      }
     }
 
     for (const file of orderedFiles) {
@@ -83,13 +116,27 @@ export const splitPDF = async (req: AuthRequest, res: Response, next: NextFuncti
     } else if (mode === 'range') {
       const start = parseInt(startPage || '1') - 1;
       const end = parseInt(endPage || String(total)) - 1;
+      
+      if (isNaN(start) || isNaN(end) || start < 0 || end >= total || start > end) {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return next(createError(`Invalid page range. Start and end must be between 1 and ${total}`, 400));
+      }
+      
       pageRanges = [Array.from({ length: end - start + 1 }, (_, i) => start + i)];
     } else if (mode === 'custom' && pages) {
       const selected: number[] = String(pages)
         .split(',')
         .map((p) => parseInt(p.trim()) - 1)
-        .filter((p) => p >= 0 && p < total);
+        .filter((p) => !isNaN(p) && p >= 0 && p < total);
+      
+      if (selected.length === 0) {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return next(createError(`No valid pages selected for split. Total pages: ${total}`, 400));
+      }
       pageRanges = [selected];
+    } else {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Invalid split mode or parameters missing', 400));
     }
 
     const outPaths: string[] = [];
@@ -121,30 +168,46 @@ export const splitPDF = async (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-// @desc  Compress PDF (basic - removes redundant data)
+// @desc  Compress PDF
 // @route POST /api/pdf/compress
 export const compressPDF = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const inputPath = (req.file as Express.Multer.File)?.path;
   try {
     if (!req.file) return next(createError('No PDF file uploaded', 400));
 
-    const originalSize = fs.statSync(inputPath).size;
-    const bytes = fs.readFileSync(inputPath);
-    const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-
-    // Save with compression options
-    const compressed = await pdfDoc.save({ useObjectStreams: true });
     const outPath = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
-    fs.writeFileSync(outPath, compressed);
+    
+    const { exec } = require('child_process');
+    const ghostscriptPath = process.env.GHOSTSCRIPT_PATH || 'gs';
+    
+    // Ghostscript command to compress PDF
+    const command = `"${ghostscriptPath}" -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outPath}" "${inputPath}"`;
 
-    const compressedSize = fs.statSync(outPath).size;
-    const reduction = (((originalSize - compressedSize) / originalSize) * 100).toFixed(1);
+    exec(command, async (error: any, stdout: string, stderr: string) => {
+      if (error) {
+        console.warn('Ghostscript failed, falling back to pdf-lib compression:', stderr || error.message);
+        
+        try {
+          const bytes = fs.readFileSync(inputPath);
+          const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+          const compressed = await pdfDoc.save({ useObjectStreams: true });
+          fs.writeFileSync(outPath, compressed);
+        } catch (fallbackError) {
+          fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+          return res.status(500).json({
+            success: false,
+            message: 'PDF compression failed',
+            error: String(fallbackError),
+          });
+        }
+      }
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Compress', fileName: req.file.originalname, status: 'success' });
+      await ActivityModel.create({ user: req.user._id, operation: 'PDF Compress', fileName: req.file!.originalname, status: 'success' });
 
-    res.download(outPath, 'compressed.pdf', (err) => {
-      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
-      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+      res.download(outPath, 'compressed.pdf', () => {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        fs.existsSync(outPath) && fs.unlinkSync(outPath);
+      });
     });
   } catch (error) {
     fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -161,18 +224,31 @@ export const protectPDF = async (req: AuthRequest, res: Response, next: NextFunc
     const { password } = req.body;
     if (!password) return next(createError('Password is required', 400));
 
-    const bytes = fs.readFileSync(inputPath);
-    const pdfDoc = await PDFDocument.load(bytes);
     const outPath = path.join(UPLOADS_PATH, `protected_${uuidv4()}.pdf`);
-    // pdf-lib doesn't natively support encryption; save with metadata note
-    const saved = await pdfDoc.save();
-    fs.writeFileSync(outPath, saved);
 
-    await ActivityModel.create({ user: req.user._id, operation: 'PDF Protect', fileName: req.file.originalname, status: 'success' });
+    const { exec } = require('child_process');
+    const ghostscriptPath = process.env.GHOSTSCRIPT_PATH || 'gs';
+    
+    // Ghostscript command to password-protect/encrypt PDF
+    const command = `"${ghostscriptPath}" -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOwnerPassword="${password}" -sUserPassword="${password}" -dEncryptionR=3 -dKeyLength=128 -dPermissions=-4 -sOutputFile="${outPath}" "${inputPath}"`;
 
-    res.download(outPath, 'protected.pdf', () => {
-      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
-      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    exec(command, async (error: any, stdout: string, stderr: string) => {
+      if (error) {
+        console.error('Ghostscript error:', error, stderr);
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return res.status(500).json({
+          success: false,
+          message: 'PDF protection failed. Please ensure Ghostscript is installed and configured on the server.',
+          error: stderr || error.message,
+        });
+      }
+
+      await ActivityModel.create({ user: req.user._id, operation: 'PDF Protect', fileName: req.file!.originalname, status: 'success' });
+
+      res.download(outPath, 'protected.pdf', () => {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        fs.existsSync(outPath) && fs.unlinkSync(outPath);
+      });
     });
   } catch (error) {
     fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
@@ -212,9 +288,26 @@ export const reorderPDF = async (req: AuthRequest, res: Response, next: NextFunc
     const { order } = req.body;
     if (!order) return next(createError('Page order is required', 400));
 
-    const pageOrder: number[] = JSON.parse(order).map((p: number) => p - 1);
+    let pageOrder: number[];
+    try {
+      pageOrder = JSON.parse(order).map((p: any) => parseInt(p) - 1);
+    } catch (e) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Invalid page order format. Must be a JSON array of page numbers.', 400));
+    }
+
     const bytes = fs.readFileSync(inputPath);
     const srcPdf = await PDFDocument.load(bytes);
+    const totalPages = srcPdf.getPageCount();
+
+    // Validate pageOrder
+    for (const p of pageOrder) {
+      if (isNaN(p) || p < 0 || p >= totalPages) {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return next(createError(`Invalid page number ${p + 1} in order. Must be between 1 and ${totalPages}`, 400));
+      }
+    }
+
     const newPdf = await PDFDocument.create();
     const copied = await newPdf.copyPages(srcPdf, pageOrder);
     copied.forEach((page) => newPdf.addPage(page));
@@ -241,6 +334,12 @@ export const rotatePDF = async (req: AuthRequest, res: Response, next: NextFunct
     if (!req.file) return next(createError('No PDF file uploaded', 400));
     const { angle = 90, pages: pagesParam } = req.body;
 
+    const rotationAngle = parseInt(angle);
+    if (isNaN(rotationAngle) || rotationAngle % 90 !== 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Angle must be a multiple of 90 degrees', 400));
+    }
+
     const bytes = fs.readFileSync(inputPath);
     const pdfDoc = await PDFDocument.load(bytes);
     const totalPages = pdfDoc.getPageCount();
@@ -252,13 +351,13 @@ export const rotatePDF = async (req: AuthRequest, res: Response, next: NextFunct
       targetPages = String(pagesParam)
         .split(',')
         .map((p) => parseInt(p.trim()) - 1)
-        .filter((p) => p >= 0 && p < totalPages);
+        .filter((p) => !isNaN(p) && p >= 0 && p < totalPages);
     }
 
     targetPages.forEach((idx) => {
       const page = pdfDoc.getPage(idx);
       const currentAngle = page.getRotation().angle;
-      page.setRotation(degrees((currentAngle + parseInt(angle)) % 360));
+      page.setRotation(degrees((currentAngle + rotationAngle) % 360));
     });
 
     const outPath = await savePDF(pdfDoc, 'rotated');
@@ -290,20 +389,28 @@ export const addWatermark = async (req: AuthRequest, res: Response, next: NextFu
       position = 'center',
     } = req.body;
 
+    const parsedOpacity = parseFloat(opacity);
+    const parsedFontSize = parseInt(fontSize);
+    if (isNaN(parsedOpacity) || parsedOpacity < 0 || parsedOpacity > 1) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Opacity must be a number between 0 and 1', 400));
+    }
+    if (isNaN(parsedFontSize) || parsedFontSize <= 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Font size must be a positive integer', 400));
+    }
+
     const bytes = fs.readFileSync(inputPath);
     const pdfDoc = await PDFDocument.load(bytes);
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // Parse hex color
-    const r = parseInt(color.slice(1, 3), 16) / 255;
-    const g = parseInt(color.slice(3, 5), 16) / 255;
-    const b = parseInt(color.slice(5, 7), 16) / 255;
+    const { r, g, b } = parseHexColor(color);
 
     const pages = pdfDoc.getPages();
     pages.forEach((page) => {
       const { width, height } = page.getSize();
-      const textWidth = font.widthOfTextAtSize(text, parseInt(fontSize));
-      const textHeight = font.heightAtSize(parseInt(fontSize));
+      const textWidth = font.widthOfTextAtSize(text, parsedFontSize);
+      const textHeight = font.heightAtSize(parsedFontSize);
 
       let x = (width - textWidth) / 2;
       let y = height / 2 - textHeight / 2;
@@ -315,10 +422,10 @@ export const addWatermark = async (req: AuthRequest, res: Response, next: NextFu
 
       page.drawText(text, {
         x, y,
-        size: parseInt(fontSize),
+        size: parsedFontSize,
         font,
         color: rgb(r, g, b),
-        opacity: parseFloat(opacity),
+        opacity: parsedOpacity,
         rotate: degrees(-45),
       });
     });
@@ -346,20 +453,24 @@ export const addPageNumbers = async (req: AuthRequest, res: Response, next: Next
 
     const { position = 'bottom-center', fontSize = 12, color = '#000000', style = 'numeric' } = req.body;
 
+    const parsedFontSize = parseInt(fontSize);
+    if (isNaN(parsedFontSize) || parsedFontSize <= 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Font size must be a positive integer', 400));
+    }
+
     const bytes = fs.readFileSync(inputPath);
     const pdfDoc = await PDFDocument.load(bytes);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const pages = pdfDoc.getPages();
 
-    const r = parseInt(color.slice(1, 3), 16) / 255;
-    const g = parseInt(color.slice(3, 5), 16) / 255;
-    const b = parseInt(color.slice(5, 7), 16) / 255;
+    const { r, g, b } = parseHexColor(color);
 
     pages.forEach((page, i) => {
       const { width, height } = page.getSize();
       const num = style === 'roman' ? toRoman(i + 1) : String(i + 1);
       const text = `${num}`;
-      const textWidth = font.widthOfTextAtSize(text, parseInt(fontSize));
+      const textWidth = font.widthOfTextAtSize(text, parsedFontSize);
 
       let x = (width - textWidth) / 2;
       let y = 20;
@@ -370,7 +481,7 @@ export const addPageNumbers = async (req: AuthRequest, res: Response, next: Next
       else if (position === 'top-left') { x = 30; y = height - 30; }
       else if (position === 'top-right') { x = width - textWidth - 30; y = height - 30; }
 
-      page.drawText(text, { x, y, size: parseInt(fontSize), font, color: rgb(r, g, b) });
+      page.drawText(text, { x, y, size: parsedFontSize, font, color: rgb(r, g, b) });
     });
 
     const outPath = await savePDF(pdfDoc, 'numbered');
@@ -388,8 +499,8 @@ export const addPageNumbers = async (req: AuthRequest, res: Response, next: Next
 };
 
 const toRoman = (num: number): string => {
-  const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
-  const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+  const vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
+  const syms = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'];
   let result = '';
   for (let i = 0; i < vals.length; i++) {
     while (num >= vals[i]) { result += syms[i]; num -= vals[i]; }

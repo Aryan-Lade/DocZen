@@ -12,6 +12,7 @@ import {
 } from '../controllers/authController';
 import { protect } from '../middlewares/auth';
 import { authLimiter } from '../middlewares/rateLimiter';
+import { validateRequest } from '../middlewares/validation';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.post(
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   ],
+  validateRequest,
   register
 );
 
@@ -33,6 +35,7 @@ router.post(
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
+  validateRequest,
   login
 );
 
