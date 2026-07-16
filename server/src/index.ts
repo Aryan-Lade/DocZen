@@ -16,6 +16,7 @@ import imageRoutes from './routes/image';
 import ocrRoutes from './routes/ocr';
 import convertRoutes from './routes/convert';
 import activityRoutes from './routes/activity';
+import languageRoutes from './routes/language';
 
 dotenv.config();
 
@@ -65,6 +66,7 @@ app.use('/api/image', imageRoutes);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/convert', convertRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/language', languageRoutes);
 
 // Error Handling
 app.use(notFound);
