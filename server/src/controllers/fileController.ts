@@ -1,12 +1,13 @@
 import { Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
+import { Op } from 'sequelize';
+import sequelize from '../config/db';
 import DocumentModel from '../models/Document';
 import ActivityModel from '../models/Activity';
 import User from '../models/User';
 import { AuthRequest } from '../middlewares/auth';
 import { createError } from '../middlewares/error';
-import { UPLOADS_PATH } from '../middlewares/upload';
 
 const getMimeCategory = (mimeType: string): any => {
   if (mimeType === 'application/pdf') return 'pdf';
@@ -32,20 +33,22 @@ export const uploadFile = async (req: AuthRequest, res: Response, next: NextFunc
 
     for (const file of files) {
       const doc = await DocumentModel.create({
-        owner: req.user._id,
+        ownerId: req.user.id,
         originalName: file.originalname,
         fileName: file.filename,
         filePath: file.path,
         mimeType: file.mimetype,
         size: file.size,
         category: getMimeCategory(file.mimetype),
+        tags: [],
+        isDeleted: false,
       });
 
       savedDocs.push(doc);
       totalSize += file.size;
 
       await ActivityModel.create({
-        user: req.user._id,
+        userId: req.user.id,
         operation: 'File Upload',
         fileName: file.originalname,
         status: 'success',
@@ -54,7 +57,10 @@ export const uploadFile = async (req: AuthRequest, res: Response, next: NextFunc
     }
 
     // Update user storage
-    await User.findByIdAndUpdate(req.user._id, { $inc: { storageUsed: totalSize } });
+    const user = await User.findByPk(req.user.id);
+    if (user) {
+      await user.increment('storageUsed', { by: totalSize });
+    }
 
     res.status(201).json({ success: true, message: 'Files uploaded successfully', files: savedDocs });
   } catch (error) {
@@ -68,16 +74,35 @@ export const getFiles = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const { search, category, sort = '-createdAt', page = 1, limit = 20 } = req.query;
 
-    const query: any = { owner: req.user._id, isDeleted: false };
-    if (search) query.$text = { $search: search as string };
-    if (category) query.category = category;
+    const whereClause: any = { ownerId: req.user.id, isDeleted: false };
+    if (search) {
+      whereClause.originalName = { [Op.like]: `%${search}%` };
+    }
+    if (category) {
+      whereClause.category = category;
+    }
 
-    const files = await DocumentModel.find(query)
-      .sort(sort as string)
-      .skip((+page - 1) * +limit)
-      .limit(+limit);
+    let sortField = 'createdAt';
+    let sortOrder = 'DESC';
+    if (sort) {
+      const sortStr = sort as string;
+      if (sortStr.startsWith('-')) {
+        sortField = sortStr.substring(1);
+        sortOrder = 'DESC';
+      } else {
+        sortField = sortStr;
+        sortOrder = 'ASC';
+      }
+    }
 
-    const total = await DocumentModel.countDocuments(query);
+    const files = await DocumentModel.findAll({
+      where: whereClause,
+      order: [[sortField, sortOrder]],
+      offset: (+page - 1) * +limit,
+      limit: +limit,
+    });
+
+    const total = await DocumentModel.count({ where: whereClause });
 
     res.json({ success: true, files, total, page: +page, pages: Math.ceil(total / +limit) });
   } catch (error) {
@@ -89,7 +114,9 @@ export const getFiles = async (req: AuthRequest, res: Response, next: NextFuncti
 // @route GET /api/files/:id
 export const getFile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const file = await DocumentModel.findOne({ _id: req.params.id, owner: req.user._id, isDeleted: false });
+    const file = await DocumentModel.findOne({
+      where: { id: req.params.id, ownerId: req.user.id, isDeleted: false }
+    });
     if (!file) return next(createError('File not found', 404));
     res.json({ success: true, file });
   } catch (error) {
@@ -102,23 +129,24 @@ export const getFile = async (req: AuthRequest, res: Response, next: NextFunctio
 export const renameFile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { name } = req.body;
-    const file = await DocumentModel.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user._id },
-      { originalName: name },
-      { new: true }
-    );
+    const file = await DocumentModel.findOne({
+      where: { id: req.params.id, ownerId: req.user.id }
+    });
     if (!file) return next(createError('File not found', 404));
+    await file.update({ originalName: name });
     res.json({ success: true, message: 'File renamed', file });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc  Delete file (soft delete)
+// @desc  Delete file (hard delete)
 // @route DELETE /api/files/:id
 export const deleteFile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const file = await DocumentModel.findOne({ _id: req.params.id, owner: req.user._id });
+    const file = await DocumentModel.findOne({
+      where: { id: req.params.id, ownerId: req.user.id }
+    });
     if (!file) return next(createError('File not found', 404));
 
     // Hard delete from disk
@@ -126,13 +154,20 @@ export const deleteFile = async (req: AuthRequest, res: Response, next: NextFunc
       fs.unlinkSync(file.filePath);
     }
 
-    await DocumentModel.findByIdAndDelete(file._id);
-    await User.findByIdAndUpdate(req.user._id, { $inc: { storageUsed: -file.size } });
+    const fileSize = file.size;
+    const fileName = file.originalName;
+
+    await file.destroy();
+
+    const user = await User.findByPk(req.user.id);
+    if (user) {
+      await user.decrement('storageUsed', { by: fileSize });
+    }
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'File Delete',
-      fileName: file.originalName,
+      fileName: fileName,
       status: 'success',
     });
 
@@ -146,7 +181,9 @@ export const deleteFile = async (req: AuthRequest, res: Response, next: NextFunc
 // @route GET /api/files/:id/download
 export const downloadFile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const file = await DocumentModel.findOne({ _id: req.params.id, owner: req.user._id, isDeleted: false });
+    const file = await DocumentModel.findOne({
+      where: { id: req.params.id, ownerId: req.user.id, isDeleted: false }
+    });
     if (!file) return next(createError('File not found', 404));
 
     if (!fs.existsSync(file.filePath)) {
@@ -163,17 +200,26 @@ export const downloadFile = async (req: AuthRequest, res: Response, next: NextFu
 // @route GET /api/files/stats
 export const getStats = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const [totalFiles, recentDocs, user] = await Promise.all([
-      DocumentModel.countDocuments({ owner: userId, isDeleted: false }),
-      DocumentModel.find({ owner: userId, isDeleted: false }).sort('-createdAt').limit(5),
-      User.findById(userId),
+      DocumentModel.count({ where: { ownerId: userId, isDeleted: false } }),
+      DocumentModel.findAll({
+        where: { ownerId: userId, isDeleted: false },
+        order: [['createdAt', 'DESC']],
+        limit: 5,
+      }),
+      User.findByPk(userId),
     ]);
 
-    const categoryBreakdown = await DocumentModel.aggregate([
-      { $match: { owner: userId, isDeleted: false } },
-      { $group: { _id: '$category', count: { $sum: 1 }, totalSize: { $sum: '$size' } } },
-    ]);
+    const categoryBreakdown = await DocumentModel.findAll({
+      attributes: [
+        'category',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('size')), 'totalSize'],
+      ],
+      where: { ownerId: userId, isDeleted: false },
+      group: ['category'],
+    });
 
     res.json({
       success: true,

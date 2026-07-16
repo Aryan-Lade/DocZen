@@ -8,12 +8,14 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const { page = 1, limit = 20 } = req.query;
 
-    const activities = await ActivityModel.find({ user: req.user._id })
-      .sort('-createdAt')
-      .skip((+page - 1) * +limit)
-      .limit(+limit);
+    const activities = await ActivityModel.findAll({
+      where: { userId: req.user.id },
+      order: [['createdAt', 'DESC']],
+      offset: (+page - 1) * +limit,
+      limit: +limit,
+    });
 
-    const total = await ActivityModel.countDocuments({ user: req.user._id });
+    const total = await ActivityModel.count({ where: { userId: req.user.id } });
 
     res.json({
       success: true,
@@ -31,7 +33,7 @@ export const getActivity = async (req: AuthRequest, res: Response, next: NextFun
 // @route DELETE /api/activity
 export const clearActivity = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    await ActivityModel.deleteMany({ user: req.user._id });
+    await ActivityModel.destroy({ where: { userId: req.user.id } });
     res.json({ success: true, message: 'Activity log cleared' });
   } catch (error) {
     next(error);

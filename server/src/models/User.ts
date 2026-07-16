@@ -1,47 +1,123 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import { DataTypes, Model } from 'sequelize';
 import bcrypt from 'bcryptjs';
+import sequelize from '../config/db';
 
-export interface IUser extends Document {
+export interface IUserAttributes {
+  id?: string;
   name: string;
   email: string;
-  password: string;
-  avatar?: string;
-  role: 'user' | 'admin';
-  storageUsed: number;
-  storageLimit: number;
-  resetPasswordToken?: string;
-  resetPasswordExpire?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-  comparePassword(candidatePassword: string): Promise<boolean>;
+  password?: string;
+  avatar?: string | null;
+  role?: 'user' | 'admin';
+  storageUsed?: number;
+  storageLimit?: number;
+  resetPasswordToken?: string | null;
+  resetPasswordExpire?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const UserSchema = new Schema<IUser>(
+export class User extends Model<IUserAttributes> implements IUserAttributes {
+  public id!: string;
+  public name!: string;
+  public email!: string;
+  public password!: string;
+  public avatar!: string | null;
+  public role!: 'user' | 'admin';
+  public storageUsed!: number;
+  public storageLimit!: number;
+  public resetPasswordToken!: string | null;
+  public resetPasswordExpire!: Date | null;
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+
+  // Compatibility getter
+  public get _id(): string {
+    return this.id;
+  }
+
+  // Instance method: compare password
+  public async comparePassword(candidatePassword: string): Promise<boolean> {
+    return bcrypt.compare(candidatePassword, this.password);
+  }
+}
+
+User.init(
   {
-    name: { type: String, required: true, trim: true, maxlength: 100 },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6, select: false },
-    avatar: { type: String, default: null },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    storageUsed: { type: Number, default: 0 },
-    storageLimit: { type: Number, default: 1024 * 1024 * 1024 }, // 1GB default
-    resetPasswordToken: { type: String },
-    resetPasswordExpire: { type: Date },
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    email: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true,
+      },
+    },
+    password: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    avatar: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: null,
+    },
+    role: {
+      type: DataTypes.ENUM('user', 'admin'),
+      allowNull: false,
+      defaultValue: 'user',
+    },
+    storageUsed: {
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    storageLimit: {
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      defaultValue: 1024 * 1024 * 1024, // 1GB
+    },
+    resetPasswordToken: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: null,
+    },
+    resetPasswordExpire: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    },
   },
-  { timestamps: true }
+  {
+    sequelize,
+    modelName: 'User',
+    tableName: 'users',
+    timestamps: true,
+    defaultScope: {
+      attributes: { exclude: ['password'] },
+    },
+    scopes: {
+      withPassword: {
+        attributes: { include: ['password'] },
+      },
+    },
+    hooks: {
+      beforeSave: async (user: User) => {
+        if (user.changed('password')) {
+          const salt = await bcrypt.genSalt(12);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
+    },
+  }
 );
 
-// Hash password before saving
-UserSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-// Compare passwords
-UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-export default mongoose.model<IUser>('User', UserSchema);
+export default User;

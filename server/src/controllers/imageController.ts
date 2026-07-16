@@ -27,7 +27,7 @@ export const compressImage = async (req: AuthRequest, res: Response, next: NextF
       .toFile(outPath);
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'Image Compress',
       fileName: req.file.originalname,
       status: 'success',
@@ -64,7 +64,7 @@ export const convertImage = async (req: AuthRequest, res: Response, next: NextFu
       .toFile(outPath);
 
     await ActivityModel.create({
-      user: req.user._id,
+      userId: req.user.id,
       operation: 'Image Convert',
       fileName: req.file.originalname,
       status: 'success',
@@ -87,14 +87,68 @@ export const pdfToImage = async (req: AuthRequest, res: Response, next: NextFunc
   try {
     if (!req.file) return next(createError('No PDF uploaded', 400));
 
-    // Since we can't use pdf-poppler without system deps, return info message
-    // In production, use pdf-poppler or Ghostscript CLI
-    res.json({
-      success: false,
-      message: 'PDF to Image requires Ghostscript or pdf-poppler installed on the server. Please install Ghostscript and configure the path in .env.',
-    });
+    const uuid = uuidv4();
+    const outputPattern = path.join(UPLOADS_PATH, `page_${uuid}_%d.jpg`);
+    
+    const { exec } = require('child_process');
+    const ghostscriptPath = process.env.GHOSTSCRIPT_PATH || 'gs';
+    
+    const command = `"${ghostscriptPath}" -dNOPAUSE -dBATCH -sDEVICE=jpeg -r150 -sOutputFile="${outputPattern}" "${inputPath}"`;
 
-    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    exec(command, async (error: any, stdout: string, stderr: string) => {
+      if (error) {
+        console.error('Ghostscript PDF to Image error:', error, stderr);
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return res.status(500).json({
+          success: false,
+          message: 'PDF to Image conversion failed. Ensure Ghostscript is installed on the server.',
+          error: stderr || error.message,
+        });
+      }
+
+      try {
+        const filesInDir = fs.readdirSync(UPLOADS_PATH);
+        const prefix = `page_${uuid}_`;
+        const pageFiles = filesInDir
+          .filter(f => f.startsWith(prefix) && f.endsWith('.jpg'))
+          .map(f => {
+            const parts = f.substring(prefix.length).split('.');
+            const pageNum = parseInt(parts[0]) || 0;
+            return { name: f, pageNum };
+          })
+          .sort((a, b) => a.pageNum - b.pageNum)
+          .map(item => ({
+            name: `page_${item.pageNum}.jpg`,
+            path: item.name
+          }));
+
+        if (pageFiles.length === 0) {
+          fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+          return res.status(500).json({
+            success: false,
+            message: 'PDF to Image conversion succeeded but output files could not be found.',
+          });
+        }
+
+        await ActivityModel.create({
+          userId: req.user.id,
+          operation: 'PDF to Image',
+          fileName: req.file!.originalname,
+          status: 'success',
+        });
+
+        res.json({
+          success: true,
+          message: `Converted into ${pageFiles.length} pages`,
+          files: pageFiles,
+        });
+
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      } catch (dirErr) {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        next(dirErr);
+      }
+    });
   } catch (error) {
     fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
     next(error);
