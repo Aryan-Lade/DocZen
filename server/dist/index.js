@@ -19,6 +19,7 @@ const image_1 = __importDefault(require("./routes/image"));
 const ocr_1 = __importDefault(require("./routes/ocr"));
 const convert_1 = __importDefault(require("./routes/convert"));
 const activity_1 = __importDefault(require("./routes/activity"));
+const language_1 = __importDefault(require("./routes/language"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +58,7 @@ app.use('/api/image', image_1.default);
 app.use('/api/ocr', ocr_1.default);
 app.use('/api/convert', convert_1.default);
 app.use('/api/activity', activity_1.default);
+app.use('/api/language', language_1.default);
 // Error Handling
 app.use(error_1.notFound);
 app.use(error_1.errorHandler);

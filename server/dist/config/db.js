@@ -1,7 +1,13 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectDB = void 0;
 const sequelize_1 = require("sequelize");
+const dotenv_1 = __importDefault(require("dotenv"));
+// Load env vars here too — module imports run before index.ts calls dotenv.config()
+dotenv_1.default.config();
 const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL;
 let sequelize;
 if (databaseUrl) {

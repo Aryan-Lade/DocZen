@@ -1,4 +1,8 @@
 import { Sequelize } from 'sequelize';
+import dotenv from 'dotenv';
+
+// Load env vars here too — module imports run before index.ts calls dotenv.config()
+dotenv.config();
 
 const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_URL;
 
