@@ -307,6 +307,38 @@ export const TOOLS: Tool[] = [
 
   // ================= CONVERT =================
   {
+    slug: 'word-to-pdf',
+    name: 'Word to PDF',
+    shortDesc: 'Convert Word documents to PDF',
+    icon: '📄',
+    iconBg: '#eeeefc',
+    category: 'convert',
+    endpoint: '/api/convert/office-to-pdf',
+    fileMode: 'single',
+    accept: '.doc,.docx',
+    fileFieldName: 'file',
+    fields: [],
+    responseType: 'download',
+    downloadName: 'converted.pdf',
+    helpText: 'Convert your Word document to a PDF file securely.',
+  },
+  {
+    slug: 'pdf-to-word',
+    name: 'PDF to Word',
+    shortDesc: 'Convert PDF files to Word',
+    icon: '📝',
+    iconBg: '#eafaf0',
+    category: 'convert',
+    endpoint: '/api/convert/pdf-to-office', // Note: backend might need this endpoint
+    fileMode: 'single',
+    accept: '.pdf',
+    fileFieldName: 'file',
+    fields: [],
+    responseType: 'download',
+    downloadName: 'converted.docx',
+    helpText: 'Convert your PDF to an editable Word document.',
+  },
+  {
     slug: 'text-to-pdf',
     name: 'Text to PDF',
     shortDesc: 'Turn a .txt file into a PDF',

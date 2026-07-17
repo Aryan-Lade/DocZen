@@ -9,6 +9,7 @@ const router = (0, express_1.Router)();
 router.use(auth_1.protect, rateLimiter_1.uploadLimiter);
 router.post('/text-to-pdf', upload_1.upload.single('file'), convertController_1.textToPdf);
 router.post('/office-to-pdf', upload_1.upload.single('file'), convertController_1.officeToPdf);
+router.post('/pdf-to-office', upload_1.upload.single('file'), convertController_1.pdfToOffice);
 router.post('/html-to-pdf', upload_1.upload.single('file'), convertController_1.htmlToPdf);
 exports.default = router;
 //# sourceMappingURL=convert.js.map
