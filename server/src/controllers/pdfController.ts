@@ -170,44 +170,104 @@ export const splitPDF = async (req: AuthRequest, res: Response, next: NextFuncti
 
 // @desc  Compress PDF
 // @route POST /api/pdf/compress
+// Body (optional): mode = 'percent' | 'size'
+//   - percent: targetPercent (how much to reduce, 1–99)  → target = original * (1 - pct/100)
+//   - size:    targetBytes   (absolute target size in bytes)
+// Compression is best-effort: Ghostscript presets are tried from highest to lowest
+// quality and the highest-quality result that meets the target is returned. If none
+// meet it, the smallest achievable result is returned. Sizes are reported via headers.
 export const compressPDF = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const inputPath = (req.file as Express.Multer.File)?.path;
   try {
     if (!req.file) return next(createError('No PDF file uploaded', 400));
 
-    const outPath = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
-    
+    const originalSize = fs.statSync(inputPath).size;
+
+    // Resolve the requested target size in bytes (null = no explicit target).
+    const { mode, targetBytes, targetPercent } = req.body;
+    let target: number | null = null;
+    if (mode === 'size' && targetBytes != null) {
+      const t = parseInt(targetBytes, 10);
+      if (!isNaN(t) && t > 0) target = t;
+    } else if (mode === 'percent' && targetPercent != null) {
+      const p = parseFloat(targetPercent);
+      if (!isNaN(p) && p > 0 && p < 100) target = Math.round(originalSize * (1 - p / 100));
+    }
+
     const { exec } = require('child_process');
     const ghostscriptPath = process.env.GHOSTSCRIPT_PATH || 'gs';
-    
-    // Ghostscript command to compress PDF
-    const command = `"${ghostscriptPath}" -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outPath}" "${inputPath}"`;
 
-    exec(command, async (error: any, stdout: string, stderr: string) => {
-      if (error) {
-        console.warn('Ghostscript failed, falling back to pdf-lib compression:', stderr || error.message);
-        
-        try {
-          const bytes = fs.readFileSync(inputPath);
-          const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-          const compressed = await pdfDoc.save({ useObjectStreams: true });
-          fs.writeFileSync(outPath, compressed);
-        } catch (fallbackError) {
-          fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
-          return res.status(500).json({
-            success: false,
-            message: 'PDF compression failed',
-            error: String(fallbackError),
-          });
-        }
-      }
-
-      await ActivityModel.create({ userId: req.user.id, operation: 'PDF Compress', fileName: req.file!.originalname, status: 'success' });
-
-      res.download(outPath, 'compressed.pdf', () => {
-        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
-        fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    // Run Ghostscript with a single quality preset → resolves to {path,size} or null on failure.
+    const runGs = (preset: string): Promise<{ path: string; size: number } | null> =>
+      new Promise((resolve) => {
+        const out = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
+        const cmd = `"${ghostscriptPath}" -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${preset} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${out}" "${inputPath}"`;
+        exec(cmd, (error: any) => {
+          if (error || !fs.existsSync(out)) return resolve(null);
+          resolve({ path: out, size: fs.statSync(out).size });
+        });
       });
+
+    // With a target, sweep presets from highest to most aggressive quality and stop at the
+    // first that meets it. Without a target, keep the original single /screen behaviour.
+    const presets = target !== null
+      ? ['/prepress', '/printer', '/ebook', '/screen']
+      : ['/screen'];
+
+    let best: { path: string; size: number } | null = null;
+    for (const preset of presets) {
+      const r = await runGs(preset);
+      if (!r) continue;
+      if (!best) {
+        best = r;
+      } else if (r.size < best.size) {
+        fs.existsSync(best.path) && fs.unlinkSync(best.path); // discard the larger result
+        best = r;
+      } else {
+        fs.existsSync(r.path) && fs.unlinkSync(r.path);       // this preset didn't help
+      }
+      if (target !== null && best.size <= target) break;      // met target at best quality → done
+    }
+
+    // Fallback: Ghostscript unavailable/failed → compress with pdf-lib object streams.
+    let outPath: string;
+    if (best) {
+      outPath = best.path;
+    } else {
+      outPath = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
+      try {
+        const bytes = fs.readFileSync(inputPath);
+        const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+        const compressed = await pdfDoc.save({ useObjectStreams: true });
+        fs.writeFileSync(outPath, compressed);
+      } catch (fallbackError) {
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return next(createError('PDF compression failed: ' + String(fallbackError), 500));
+      }
+    }
+
+    const compressedSize = fs.statSync(outPath).size;
+
+    await ActivityModel.create({
+      userId: req.user.id,
+      operation: 'PDF Compress',
+      fileName: req.file!.originalname,
+      status: 'success',
+      fileSize: compressedSize,
+      details: target !== null
+        ? `Target ${(target / 1024).toFixed(0)}KB · ${originalSize} → ${compressedSize} bytes`
+        : `${originalSize} → ${compressedSize} bytes`,
+    });
+
+    // Surface the numbers to the client (also exposed via CORS in index.ts).
+    res.setHeader('X-Original-Size', String(originalSize));
+    res.setHeader('X-Compressed-Size', String(compressedSize));
+    res.setHeader('X-Target-Bytes', target !== null ? String(target) : '');
+    res.setHeader('X-Target-Met', target !== null ? String(compressedSize <= target) : 'true');
+
+    res.download(outPath, 'compressed.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
     });
   } catch (error) {
     fs.existsSync(inputPath) && fs.unlinkSync(inputPath);

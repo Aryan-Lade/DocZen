@@ -1,11 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
-import { api, errMessage, downloadBlob } from '../lib/api';
+import { api, errMessage, downloadBlob, formatBytes } from '../lib/api';
 import { toolBySlug, Tool, ToolField } from '../lib/tools';
 import Dropzone from '../components/Dropzone';
 
 type Result =
-  | { kind: 'download'; filename: string }
+  | {
+      kind: 'download';
+      filename: string;
+      originalSize?: number;
+      compressedSize?: number;
+      targetBytes?: number | null;
+      targetMet?: boolean;
+    }
   | { kind: 'ocr'; text: string; confidence: string; wordCount: number }
   | {
       kind: 'language';
@@ -58,6 +65,21 @@ export default function ToolRunner() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
 
+  // Compress-PDF only: how much to reduce the file by.
+  const isCompress = tool?.slug === 'pdf-compress';
+  const [compressMode, setCompressMode] = useState<'percent' | 'size'>('percent');
+  const [reducePercent, setReducePercent] = useState(50);
+  const [targetValue, setTargetValue] = useState('1');
+  const [targetUnit, setTargetUnit] = useState<'KB' | 'MB'>('MB');
+
+  const originalSize = files[0]?.size ?? 0;
+  const targetSizeBytes = targetUnit === 'MB'
+    ? Math.round(parseFloat(targetValue || '0') * 1024 * 1024)
+    : Math.round(parseFloat(targetValue || '0') * 1024);
+  const estimatedTarget = compressMode === 'percent'
+    ? Math.round(originalSize * (1 - reducePercent / 100))
+    : targetSizeBytes;
+
   if (!tool) return <Navigate to="/tools" replace />;
 
   const visibleFields = tool.fields.filter(
@@ -80,6 +102,15 @@ export default function ToolRunner() {
       files.forEach((f) => fd.append(t.fileFieldName, f));
     } else if (files[0]) {
       fd.append(t.fileFieldName, files[0]);
+    }
+    // Compress PDF: send the reduction target the user chose.
+    if (t.slug === 'pdf-compress') {
+      fd.append('mode', compressMode);
+      if (compressMode === 'percent') {
+        fd.append('targetPercent', String(reducePercent));
+      } else {
+        fd.append('targetBytes', String(targetSizeBytes));
+      }
     }
     for (const field of visibleFields) {
       const v = values[field.name];
@@ -125,7 +156,18 @@ export default function ToolRunner() {
         const match = cd.match(/filename="?([^";]+)"?/);
         const filename = match?.[1] || tool.downloadName || 'result';
         downloadBlob(res.data as Blob, filename);
-        setResult({ kind: 'download', filename });
+        const os = Number(res.headers['x-original-size']);
+        const cs = Number(res.headers['x-compressed-size']);
+        const tb = res.headers['x-target-bytes'];
+        const tm = res.headers['x-target-met'];
+        setResult({
+          kind: 'download',
+          filename,
+          originalSize: isFinite(os) && os > 0 ? os : undefined,
+          compressedSize: isFinite(cs) && cs > 0 ? cs : undefined,
+          targetBytes: tb ? Number(tb) : null,
+          targetMet: tm === undefined ? undefined : tm === 'true',
+        });
       }
     } catch (err) {
       setError(await errMessage(err));
@@ -166,7 +208,79 @@ export default function ToolRunner() {
 
         <div className="card">
           <div className="section-title">Options</div>
-          {visibleFields.length === 0 && (
+
+          {isCompress && (
+            <div className="compress-panel">
+              {originalSize > 0 ? (
+                <div className="cp-orig">
+                  <span className="cp-orig-label">Original size</span>
+                  <span className="cp-orig-value">{formatBytes(originalSize)}</span>
+                </div>
+              ) : (
+                <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 16 }}>
+                  Upload a PDF to choose how much to reduce it.
+                </p>
+              )}
+
+              <div className="seg">
+                <button
+                  type="button"
+                  className={compressMode === 'percent' ? 'active' : ''}
+                  onClick={() => setCompressMode('percent')}
+                >
+                  By percent
+                </button>
+                <button
+                  type="button"
+                  className={compressMode === 'size' ? 'active' : ''}
+                  onClick={() => setCompressMode('size')}
+                >
+                  By target size
+                </button>
+              </div>
+
+              {compressMode === 'percent' ? (
+                <div className="field">
+                  <label>Reduce by — {reducePercent}%</label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={90}
+                    step={5}
+                    value={reducePercent}
+                    onChange={(e) => setReducePercent(Number(e.target.value))}
+                  />
+                </div>
+              ) : (
+                <div className="field">
+                  <label>Target size</label>
+                  <div className="cp-size-row">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={targetValue}
+                      onChange={(e) => setTargetValue(e.target.value)}
+                    />
+                    <select value={targetUnit} onChange={(e) => setTargetUnit(e.target.value as 'KB' | 'MB')}>
+                      <option value="KB">KB</option>
+                      <option value="MB">MB</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {originalSize > 0 && estimatedTarget > 0 && (
+                <div className="cp-estimate">
+                  {formatBytes(originalSize)} <span className="cp-arrow">→</span>{' '}
+                  <strong>~{formatBytes(Math.max(0, Math.min(estimatedTarget, originalSize)))}</strong>
+                  <span className="cp-note"> (best-effort target)</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isCompress && visibleFields.length === 0 && (
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, marginBottom: 16 }}>
               No options needed — just upload and run.
             </p>
@@ -189,13 +303,45 @@ export default function ToolRunner() {
 
 function ResultView({ result }: { result: Result }) {
   if (result.kind === 'download') {
+    const hasSizes = result.originalSize != null && result.compressedSize != null;
+    const saved = hasSizes ? result.originalSize! - result.compressedSize! : 0;
+    const savedPct = hasSizes && result.originalSize! > 0
+      ? Math.round((saved / result.originalSize!) * 100)
+      : 0;
     return (
-      <div className="result-ok">
-        <div className="r-icon">✅</div>
-        <div>
-          <div className="r-title">Done — download started</div>
-          <div className="r-sub">Saved as {result.filename}</div>
+      <div>
+        <div className="result-ok">
+          <div className="r-icon">✅</div>
+          <div>
+            <div className="r-title">Done — download started</div>
+            <div className="r-sub">Saved as {result.filename}</div>
+          </div>
         </div>
+        {hasSizes && (
+          <div className="compress-result">
+            <div className="cr-row">
+              <div className="cr-cell">
+                <div className="cr-label">Original</div>
+                <div className="cr-value">{formatBytes(result.originalSize!)}</div>
+              </div>
+              <div className="cr-arrow">→</div>
+              <div className="cr-cell">
+                <div className="cr-label">Compressed</div>
+                <div className="cr-value cr-green">{formatBytes(result.compressedSize!)}</div>
+              </div>
+              <div className="cr-cell">
+                <div className="cr-label">Saved</div>
+                <div className="cr-value cr-green">{savedPct}%</div>
+              </div>
+            </div>
+            {result.targetBytes != null && result.targetBytes > 0 && result.targetMet === false && (
+              <div className="cr-warn">
+                ⚠️ Couldn't reach the {formatBytes(result.targetBytes)} target — this is the smallest
+                achievable size without further quality loss.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
