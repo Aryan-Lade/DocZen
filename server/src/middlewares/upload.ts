@@ -32,9 +32,17 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterC
     'application/vnd.ms-powerpoint',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'text/plain', 'text/html',
+    'text/markdown', 'text/x-markdown',
+    'text/csv', 'application/csv',
+    'image/tiff', 'image/svg+xml',
+    'application/octet-stream', // some browsers send this for .md/.csv files
   ];
 
-  if (allowedMimes.includes(file.mimetype)) {
+  const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.svg',
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.html', '.htm', '.md', '.markdown', '.csv'];
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (allowedMimes.includes(file.mimetype) && (file.mimetype !== 'application/octet-stream' || allowedExts.includes(ext))) {
     cb(null, true);
   } else {
     cb(new Error(`File type ${file.mimetype} is not supported`));
