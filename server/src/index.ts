@@ -37,6 +37,8 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  // Expose compression size headers so the client can read them on blob responses
+  exposedHeaders: ['X-Original-Size', 'X-Compressed-Size', 'X-Target-Bytes', 'X-Target-Met'],
 }));
 
 // Body parsing

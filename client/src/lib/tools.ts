@@ -101,6 +101,7 @@ export const TOOLS: Tool[] = [
     fields: [],
     responseType: 'download',
     downloadName: 'compressed.pdf',
+    helpText: 'Upload a PDF, then set how much to reduce it — by percentage or a target size. Compression is best-effort and always returns the closest achievable result.',
   },
   {
     slug: 'pdf-protect',
