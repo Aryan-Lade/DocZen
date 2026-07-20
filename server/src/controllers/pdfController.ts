@@ -498,6 +498,247 @@ export const addPageNumbers = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+// @desc  Add text to PDF pages (basic PDF editing)
+// @route POST /api/pdf/add-text
+export const addTextToPDF = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No PDF file uploaded', 400));
+
+    const {
+      text,
+      pages: pagesParam = 'all',
+      position = 'center',
+      fontSize = 18,
+      color = '#000000',
+    } = req.body;
+
+    if (!text || !String(text).trim()) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Text to add is required', 400));
+    }
+
+    const parsedFontSize = parseInt(fontSize);
+    if (isNaN(parsedFontSize) || parsedFontSize <= 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Font size must be a positive integer', 400));
+    }
+
+    const bytes = fs.readFileSync(inputPath);
+    const pdfDoc = await PDFDocument.load(bytes);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const totalPages = pdfDoc.getPageCount();
+
+    let targetPages: number[];
+    if (pagesParam === 'all' || !pagesParam) {
+      targetPages = Array.from({ length: totalPages }, (_, i) => i);
+    } else {
+      targetPages = String(pagesParam)
+        .split(',')
+        .map((p) => parseInt(p.trim()) - 1)
+        .filter((p) => !isNaN(p) && p >= 0 && p < totalPages);
+    }
+
+    if (targetPages.length === 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError(`No valid pages selected. Total pages: ${totalPages}`, 400));
+    }
+
+    const { r, g, b } = parseHexColor(color);
+
+    targetPages.forEach((idx) => {
+      const page = pdfDoc.getPage(idx);
+      const { width, height } = page.getSize();
+      const textWidth = font.widthOfTextAtSize(text, parsedFontSize);
+      const textHeight = font.heightAtSize(parsedFontSize);
+
+      let x = (width - textWidth) / 2;
+      let y = height / 2 - textHeight / 2;
+
+      if (position === 'top-left') { x = 50; y = height - 60; }
+      else if (position === 'top-center') { y = height - 60; }
+      else if (position === 'top-right') { x = width - textWidth - 50; y = height - 60; }
+      else if (position === 'bottom-left') { x = 50; y = 40; }
+      else if (position === 'bottom-center') { y = 40; }
+      else if (position === 'bottom-right') { x = width - textWidth - 50; y = 40; }
+
+      page.drawText(text, { x, y, size: parsedFontSize, font, color: rgb(r, g, b) });
+    });
+
+    const outPath = await savePDF(pdfDoc, 'edited');
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Add Text', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, 'edited.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Delete pages from a PDF
+// @route POST /api/pdf/delete-pages
+export const deletePages = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No PDF file uploaded', 400));
+    const { pages } = req.body;
+    if (!pages) return next(createError('Pages to delete are required', 400));
+
+    const bytes = fs.readFileSync(inputPath);
+    const srcPdf = await PDFDocument.load(bytes);
+    const total = srcPdf.getPageCount();
+
+    const toDelete = new Set(
+      String(pages)
+        .split(',')
+        .map((p) => parseInt(p.trim()) - 1)
+        .filter((p) => !isNaN(p) && p >= 0 && p < total)
+    );
+
+    if (toDelete.size === 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError(`No valid pages selected. Total pages: ${total}`, 400));
+    }
+    if (toDelete.size >= total) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Cannot delete every page of the PDF', 400));
+    }
+
+    const keep = Array.from({ length: total }, (_, i) => i).filter((i) => !toDelete.has(i));
+
+    const newPdf = await PDFDocument.create();
+    const copied = await newPdf.copyPages(srcPdf, keep);
+    copied.forEach((page) => newPdf.addPage(page));
+
+    const outPath = await savePDF(newPdf, 'trimmed');
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Delete Pages', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, 'trimmed.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Extract selected pages into a new PDF
+// @route POST /api/pdf/extract-pages
+export const extractPages = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No PDF file uploaded', 400));
+    const { pages } = req.body;
+    if (!pages) return next(createError('Pages to extract are required', 400));
+
+    const bytes = fs.readFileSync(inputPath);
+    const srcPdf = await PDFDocument.load(bytes);
+    const total = srcPdf.getPageCount();
+
+    const selected = String(pages)
+      .split(',')
+      .map((p) => parseInt(p.trim()) - 1)
+      .filter((p) => !isNaN(p) && p >= 0 && p < total);
+
+    if (selected.length === 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError(`No valid pages selected. Total pages: ${total}`, 400));
+    }
+
+    const newPdf = await PDFDocument.create();
+    const copied = await newPdf.copyPages(srcPdf, selected);
+    copied.forEach((page) => newPdf.addPage(page));
+
+    const outPath = await savePDF(newPdf, 'extracted');
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Extract Pages', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, 'extracted.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Edit PDF metadata (title, author, subject, keywords)
+// @route POST /api/pdf/metadata
+export const editMetadata = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No PDF file uploaded', 400));
+
+    const { title, author, subject, keywords } = req.body;
+
+    const bytes = fs.readFileSync(inputPath);
+    const pdfDoc = await PDFDocument.load(bytes);
+
+    if (title !== undefined && title !== '') pdfDoc.setTitle(String(title));
+    if (author !== undefined && author !== '') pdfDoc.setAuthor(String(author));
+    if (subject !== undefined && subject !== '') pdfDoc.setSubject(String(subject));
+    if (keywords !== undefined && keywords !== '') {
+      pdfDoc.setKeywords(String(keywords).split(',').map((k: string) => k.trim()).filter(Boolean));
+    }
+
+    const outPath = await savePDF(pdfDoc, 'metadata');
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Edit Metadata', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, 'updated.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Duplicate / repeat pages of a PDF n times
+// @route POST /api/pdf/duplicate
+export const duplicatePDF = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No PDF file uploaded', 400));
+
+    const { copies = 2 } = req.body;
+    const n = parseInt(copies);
+    if (isNaN(n) || n < 2 || n > 20) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Copies must be a number between 2 and 20', 400));
+    }
+
+    const bytes = fs.readFileSync(inputPath);
+    const srcPdf = await PDFDocument.load(bytes);
+    const newPdf = await PDFDocument.create();
+
+    for (let i = 0; i < n; i++) {
+      const copied = await newPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+      copied.forEach((page) => newPdf.addPage(page));
+    }
+
+    const outPath = await savePDF(newPdf, 'duplicated');
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'PDF Duplicate', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, 'duplicated.pdf', () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
 const toRoman = (num: number): string => {
   const vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
   const syms = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'];

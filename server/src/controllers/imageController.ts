@@ -80,6 +80,216 @@ export const convertImage = async (req: AuthRequest, res: Response, next: NextFu
   }
 };
 
+// @desc  Resize image
+// @route POST /api/image/resize
+export const resizeImage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No image uploaded', 400));
+
+    const { width, height, fit = 'inside' } = req.body;
+    const w = width ? parseInt(width) : undefined;
+    const h = height ? parseInt(height) : undefined;
+
+    if ((!w || isNaN(w)) && (!h || isNaN(h))) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Provide a width and/or height in pixels', 400));
+    }
+
+    const validFits = ['inside', 'cover', 'fill', 'contain'];
+    const fitMode = validFits.includes(fit) ? fit : 'inside';
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const outPath = path.join(UPLOADS_PATH, `resized_${uuidv4()}${ext}`);
+
+    await sharp(inputPath)
+      .resize({ width: w, height: h, fit: fitMode as any })
+      .toFile(outPath);
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'Image Resize', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, `resized_${req.file.originalname}`, () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Rotate / flip image
+// @route POST /api/image/rotate
+export const rotateImage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No image uploaded', 400));
+
+    const { angle = '90', flip = 'none' } = req.body;
+    const deg = parseInt(angle);
+    if (isNaN(deg)) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Angle must be a number', 400));
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const outPath = path.join(UPLOADS_PATH, `rotated_${uuidv4()}${ext}`);
+
+    let pipeline = sharp(inputPath).rotate(deg);
+    if (flip === 'horizontal') pipeline = pipeline.flop();
+    else if (flip === 'vertical') pipeline = pipeline.flip();
+    else if (flip === 'both') pipeline = pipeline.flip().flop();
+
+    await pipeline.toFile(outPath);
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'Image Rotate', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, `rotated_${req.file.originalname}`, () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Apply effects to image (grayscale, blur, sharpen, negate, tint)
+// @route POST /api/image/effects
+export const imageEffects = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No image uploaded', 400));
+
+    const { effect = 'grayscale', intensity = '5' } = req.body;
+    const amount = Math.min(50, Math.max(1, parseInt(intensity) || 5));
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const outPath = path.join(UPLOADS_PATH, `effect_${uuidv4()}${ext}`);
+
+    let pipeline = sharp(inputPath);
+    switch (effect) {
+      case 'grayscale': pipeline = pipeline.grayscale(); break;
+      case 'blur': pipeline = pipeline.blur(amount); break;
+      case 'sharpen': pipeline = pipeline.sharpen({ sigma: Math.min(10, amount) }); break;
+      case 'negate': pipeline = pipeline.negate(); break;
+      case 'sepia': pipeline = pipeline.recomb([
+        [0.393, 0.769, 0.189],
+        [0.349, 0.686, 0.168],
+        [0.272, 0.534, 0.131],
+      ]); break;
+      default:
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return next(createError(`Effect ${effect} is not supported`, 400));
+    }
+
+    await pipeline.toFile(outPath);
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'Image Effects', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, `${effect}_${req.file.originalname}`, () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Crop image
+// @route POST /api/image/crop
+export const cropImage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No image uploaded', 400));
+
+    const { left = '0', top = '0', width, height } = req.body;
+    const l = parseInt(left) || 0;
+    const t = parseInt(top) || 0;
+    const w = parseInt(width);
+    const h = parseInt(height);
+
+    if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError('Crop width and height are required (in pixels)', 400));
+    }
+
+    const meta = await sharp(inputPath).metadata();
+    if (meta.width && meta.height && (l + w > meta.width || t + h > meta.height)) {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      return next(createError(`Crop area is outside the image (${meta.width}x${meta.height})`, 400));
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const outPath = path.join(UPLOADS_PATH, `cropped_${uuidv4()}${ext}`);
+
+    await sharp(inputPath)
+      .extract({ left: l, top: t, width: w, height: h })
+      .toFile(outPath);
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'Image Crop', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, `cropped_${req.file.originalname}`, () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
+// @desc  Add a text watermark to an image
+// @route POST /api/image/watermark
+export const watermarkImage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const inputPath = (req.file as Express.Multer.File)?.path;
+  try {
+    if (!req.file) return next(createError('No image uploaded', 400));
+
+    const { text = 'WATERMARK', fontSize = '48', color = '#ffffff', opacity = '0.5', position = 'center' } = req.body;
+    const size = Math.min(300, Math.max(8, parseInt(fontSize) || 48));
+    const alpha = Math.min(1, Math.max(0, parseFloat(opacity) || 0.5));
+
+    const meta = await sharp(inputPath).metadata();
+    const imgW = meta.width || 800;
+    const imgH = meta.height || 600;
+
+    const safeText = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let anchor = 'middle';
+    let x = imgW / 2;
+    let y = imgH / 2;
+    if (position === 'top-left') { anchor = 'start'; x = 30; y = size + 20; }
+    else if (position === 'top-right') { anchor = 'end'; x = imgW - 30; y = size + 20; }
+    else if (position === 'bottom-left') { anchor = 'start'; x = 30; y = imgH - 30; }
+    else if (position === 'bottom-right') { anchor = 'end'; x = imgW - 30; y = imgH - 30; }
+
+    const svg = Buffer.from(
+      `<svg width="${imgW}" height="${imgH}" xmlns="http://www.w3.org/2000/svg">` +
+      `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, sans-serif" font-weight="bold" ` +
+      `font-size="${size}" fill="${color}" fill-opacity="${alpha}">${safeText}</text></svg>`
+    );
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const outPath = path.join(UPLOADS_PATH, `watermarked_${uuidv4()}${ext}`);
+
+    await sharp(inputPath)
+      .composite([{ input: svg, top: 0, left: 0 }])
+      .toFile(outPath);
+
+    await ActivityModel.create({ userId: req.user.id, operation: 'Image Watermark', fileName: req.file.originalname, status: 'success' });
+
+    res.download(outPath, `watermarked_${req.file.originalname}`, () => {
+      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    });
+  } catch (error) {
+    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    next(error);
+  }
+};
+
 // @desc  PDF to Image (per page)
 // @route POST /api/image/pdf-to-image
 export const pdfToImage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {

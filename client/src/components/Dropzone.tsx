@@ -1,5 +1,6 @@
 import { useRef, useState, DragEvent } from 'react';
 import { formatBytes } from '../lib/api';
+import { UploadCloud, FileText, ArrowUp, ArrowDown, X } from 'lucide-react';
 
 interface Props {
   accept: string;
@@ -41,14 +42,22 @@ export default function Dropzone({ accept, multiple, files, onChange }: Props) {
       <div
         className={`dropzone${drag ? ' drag' : ''}`}
         onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDrag(true);
+        }}
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
       >
-        <div className="dz-icon">📤</div>
-        <div className="dz-title">{drag ? 'Drop it here' : 'Click or drag files here'}</div>
+        <div className="dz-icon">
+          <UploadCloud size={32} />
+        </div>
+        <div className="dz-title">
+          {drag ? 'Drop your document here' : 'Choose files or drag & drop here'}
+        </div>
         <div className="dz-sub">
-          {multiple ? 'Multiple files supported' : 'Single file'} · {accept.replaceAll(',', ', ')}
+          {multiple ? 'Supports multiple documents' : 'Single file uploader'} · Supported formats:{' '}
+          {accept.replaceAll(',', ', ')}
         </div>
         <input
           ref={inputRef}
@@ -56,23 +65,47 @@ export default function Dropzone({ accept, multiple, files, onChange }: Props) {
           hidden
           accept={accept}
           multiple={multiple}
-          onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = '';
+          }}
         />
       </div>
+
       {files.length > 0 && (
         <div className="file-chips">
           {files.map((f, i) => (
             <div className="file-chip" key={`${f.name}-${i}`}>
-              <span>📄</span>
+              <div className="fc-icon">
+                <FileText size={18} />
+              </div>
               <span className="fc-name">{f.name}</span>
               <span className="fc-size">{formatBytes(f.size)}</span>
+
               {multiple && files.length > 1 && (
                 <>
-                  <button type="button" onClick={() => move(i, -1)} title="Move up" disabled={i === 0}>↑</button>
-                  <button type="button" onClick={() => move(i, 1)} title="Move down" disabled={i === files.length - 1}>↓</button>
+                  <button
+                    type="button"
+                    onClick={() => move(i, -1)}
+                    title="Move up"
+                    disabled={i === 0}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(i, 1)}
+                    title="Move down"
+                    disabled={i === files.length - 1}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
                 </>
               )}
-              <button type="button" onClick={() => removeAt(i)} title="Remove">✕</button>
+
+              <button type="button" onClick={() => removeAt(i)} title="Remove file">
+                <X size={14} />
+              </button>
             </div>
           ))}
         </div>
@@ -80,3 +113,4 @@ export default function Dropzone({ accept, multiple, files, onChange }: Props) {
     </div>
   );
 }
+
