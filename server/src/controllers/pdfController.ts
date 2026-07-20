@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -37,6 +38,13 @@ const parseHexColor = (hex: string): { r: number; g: number; b: number } => {
   if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor;
   
   return { r: r / 255, g: g / 255, b: b / 255 };
+};
+
+const UPLOADS_ROOT = `${path.resolve(UPLOADS_PATH)}${path.sep}`;
+const isWithinUploads = (filePath: string): boolean => path.resolve(filePath).startsWith(UPLOADS_ROOT);
+const safeUnlink = (filePath?: string): void => {
+  if (!filePath || !isWithinUploads(filePath)) return;
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 };
 
 // @desc  Merge PDFs
@@ -177,9 +185,11 @@ export const splitPDF = async (req: AuthRequest, res: Response, next: NextFuncti
 // quality and the highest-quality result that meets the target is returned. If none
 // meet it, the smallest achievable result is returned. Sizes are reported via headers.
 export const compressPDF = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  const inputPath = (req.file as Express.Multer.File)?.path;
+  const rawInputPath = (req.file as Express.Multer.File)?.path;
   try {
-    if (!req.file) return next(createError('No PDF file uploaded', 400));
+    if (!req.file || !rawInputPath) return next(createError('No PDF file uploaded', 400));
+    const inputPath = path.resolve(rawInputPath);
+    if (!isWithinUploads(inputPath)) return next(createError('Invalid upload path', 400));
 
     const originalSize = fs.statSync(inputPath).size;
 
@@ -194,15 +204,24 @@ export const compressPDF = async (req: AuthRequest, res: Response, next: NextFun
       if (!isNaN(p) && p > 0 && p < 100) target = Math.round(originalSize * (1 - p / 100));
     }
 
-    const { exec } = require('child_process');
     const ghostscriptPath = process.env.GHOSTSCRIPT_PATH || 'gs';
 
     // Run Ghostscript with a single quality preset → resolves to {path,size} or null on failure.
     const runGs = (preset: string): Promise<{ path: string; size: number } | null> =>
       new Promise((resolve) => {
-        const out = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
-        const cmd = `"${ghostscriptPath}" -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${preset} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${out}" "${inputPath}"`;
-        exec(cmd, (error: any) => {
+        const out = path.resolve(path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`));
+        if (!isWithinUploads(out)) return resolve(null);
+        const args = [
+          '-sDEVICE=pdfwrite',
+          '-dCompatibilityLevel=1.4',
+          `-dPDFSETTINGS=${preset}`,
+          '-dNOPAUSE',
+          '-dQUIET',
+          '-dBATCH',
+          `-sOutputFile=${out}`,
+          inputPath,
+        ];
+        execFile(ghostscriptPath, args, (error: any) => {
           if (error || !fs.existsSync(out)) return resolve(null);
           resolve({ path: out, size: fs.statSync(out).size });
         });
@@ -221,10 +240,10 @@ export const compressPDF = async (req: AuthRequest, res: Response, next: NextFun
       if (!best) {
         best = r;
       } else if (r.size < best.size) {
-        fs.existsSync(best.path) && fs.unlinkSync(best.path); // discard the larger result
+        safeUnlink(best.path); // discard the larger result
         best = r;
       } else {
-        fs.existsSync(r.path) && fs.unlinkSync(r.path);       // this preset didn't help
+        safeUnlink(r.path);       // this preset didn't help
       }
       if (target !== null && best.size <= target) break;      // met target at best quality → done
     }
@@ -234,14 +253,18 @@ export const compressPDF = async (req: AuthRequest, res: Response, next: NextFun
     if (best) {
       outPath = best.path;
     } else {
-      outPath = path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`);
+      outPath = path.resolve(path.join(UPLOADS_PATH, `compressed_${uuidv4()}.pdf`));
+      if (!isWithinUploads(outPath)) {
+        safeUnlink(inputPath);
+        return next(createError('Invalid output path', 500));
+      }
       try {
         const bytes = fs.readFileSync(inputPath);
         const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
         const compressed = await pdfDoc.save({ useObjectStreams: true });
         fs.writeFileSync(outPath, compressed);
       } catch (fallbackError) {
-        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        safeUnlink(inputPath);
         return next(createError('PDF compression failed: ' + String(fallbackError), 500));
       }
     }
@@ -266,11 +289,11 @@ export const compressPDF = async (req: AuthRequest, res: Response, next: NextFun
     res.setHeader('X-Target-Met', target !== null ? String(compressedSize <= target) : 'true');
 
     res.download(outPath, 'compressed.pdf', () => {
-      fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
-      fs.existsSync(outPath) && fs.unlinkSync(outPath);
+      safeUnlink(inputPath);
+      safeUnlink(outPath);
     });
   } catch (error) {
-    fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+    safeUnlink(rawInputPath);
     next(error);
   }
 };
