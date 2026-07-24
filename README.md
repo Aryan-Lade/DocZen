@@ -370,6 +370,7 @@ Released under the **MIT License**.
 <br/>
 
 **Made with ❤️ using React, Express & TypeScript**
+** Contributors: Aryan Lade, Mohammad Anas, Sayyad Rehan & Tanvir kanoje**
 
 ⭐ *Star this repo if DocZen made your document workflow easier!*
 
