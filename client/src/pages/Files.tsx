@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errMessage, downloadBlob, formatBytes, formatDate } from '../lib/api';
+import {
+  FileText,
+  Search,
+  Download,
+  Trash2,
+  Edit3,
+  UploadCloud,
+  AlertCircle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+} from 'lucide-react';
 
 interface Doc {
   id: number;
@@ -9,10 +22,6 @@ interface Doc {
   mimeType: string;
   createdAt: string;
 }
-
-const catIcons: Record<string, string> = {
-  pdf: '📄', image: '🖼️', word: '📝', excel: '📊', ppt: '📽️', text: '📃', other: '📦',
-};
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -72,7 +81,7 @@ export default function Files() {
       const fd = new FormData();
       Array.from(list).forEach((f) => fd.append('files', f));
       await api.post('/api/files/upload', fd);
-      flash(`${list.length} file(s) uploaded`);
+      flash(`${list.length} file(s) uploaded successfully`);
       setPage(1);
       load(1);
     } catch (err) {
@@ -107,7 +116,7 @@ export default function Files() {
     if (!window.confirm(`Delete "${doc.originalName}"? This cannot be undone.`)) return;
     try {
       await api.delete(`/api/files/${doc.id}`);
-      flash('File deleted');
+      flash('File deleted from vault');
       load();
     } catch (err) {
       setError(await errMessage(err));
@@ -116,83 +125,202 @@ export default function Files() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>My Files</h1>
-        <p>{total} file{total === 1 ? '' : 's'} stored in your workspace.</p>
+      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h1>My Document Library</h1>
+          <p>{total} document{total === 1 ? '' : 's'} stored in your personal vault.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            ref={uploadRef}
+            type="file"
+            hidden
+            multiple
+            onChange={(e) => {
+              onUpload(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <button className="btn btn-primary" onClick={() => uploadRef.current?.click()} disabled={uploading}>
+            {uploading ? (
+              <>
+                <span className="spinner" /> Uploading…
+              </>
+            ) : (
+              <>
+                <UploadCloud size={18} />
+                <span>Upload Files</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-success">{notice}</div>}
+      {error && (
+        <div className="alert alert-error" style={{ marginBottom: 16 }}>
+          <AlertCircle size={18} />
+          <span>{error}</span>
+        </div>
+      )}
 
-      <div className="toolbar">
-        <input
-          type="text"
-          placeholder="🔍 Search files…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          style={{ width: 260 }}
-        />
-        <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
-          {CATEGORY_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <div className="spacer" />
-        <input ref={uploadRef} type="file" hidden multiple onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }} />
-        <button className="btn btn-primary" onClick={() => uploadRef.current?.click()} disabled={uploading}>
-          {uploading ? <span className="spinner" /> : '⬆️ Upload files'}
-        </button>
-      </div>
+      {notice && (
+        <div className="alert alert-success" style={{ marginBottom: 16 }}>
+          <CheckCircle2 size={18} />
+          <span>{notice}</span>
+        </div>
+      )}
 
-      {loading ? (
-        <div className="center-load"><span className="spinner dark" /></div>
-      ) : docs.length === 0 ? (
-        <div className="card">
-          <div className="empty">
-            <div className="e-icon">📁</div>
-            No files yet. Upload some files to keep them in your workspace.
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="toolbar" style={{ borderBottom: 'none', padding: 0 }}>
+          <div style={{ position: 'relative', minWidth: 260, flex: 1 }}>
+            <Search
+              size={18}
+              style={{
+                position: 'absolute',
+                left: 14,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-sub)',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Search documents by title…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              style={{ paddingLeft: 42, width: '100%' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Filter size={16} style={{ color: 'var(--text-sub)' }} />
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
+              style={{ minWidth: 160 }}
+            >
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      ) : (
-        <div className="table-card">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Size</th>
-                <th>Uploaded</th>
-                <th style={{ width: 190 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.id}>
-                  <td style={{ fontWeight: 600 }}>
-                    {catIcons[d.category] ?? '📦'} {d.originalName}
-                  </td>
-                  <td><span className="badge badge-gray">{d.category}</span></td>
-                  <td>{formatBytes(d.size)}</td>
-                  <td>{formatDate(d.createdAt)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => onDownload(d)}>⬇️</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => onRename(d)}>✏️</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => onDelete(d)}>🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </div>
 
-      {pages > 1 && (
-        <div className="pager">
-          <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>
-          <span>Page {page} of {pages}</span>
-          <button className="btn btn-ghost btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next →</button>
-        </div>
-      )}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {loading ? (
+          <div className="center-load">
+            <span className="spinner dark" />
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="empty">
+            <div className="e-icon">📁</div>
+            <p>No documents found in vault. Upload files or run tools to save outputs here!</p>
+          </div>
+        ) : (
+          <>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Document Name</th>
+                  <th>Category</th>
+                  <th>Size</th>
+                  <th>Uploaded Date</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      <div className="t-name-cell">
+                        <div className="t-icon-box">
+                          <FileText size={18} />
+                        </div>
+                        <span className="t-filename">{d.originalName}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge badge-${d.category}`}>
+                        {d.category.toUpperCase()}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{formatBytes(d.size)}</td>
+                    <td style={{ color: 'var(--text-sub)' }}>{formatDate(d.createdAt)}</td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => onDownload(d)}
+                          title="Download document"
+                        >
+                          <Download size={14} />
+                          <span>Download</span>
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => onRename(d)}
+                          title="Rename file"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm danger"
+                          onClick={() => onDelete(d)}
+                          title="Delete file"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {pages > 1 && (
+              <div
+                style={{
+                  padding: '14px 20px',
+                  background: 'var(--bg-warm)',
+                  borderTop: '1px solid var(--border-light)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}
+                >
+                  <ChevronLeft size={14} />
+                  <span>Previous</span>
+                </button>
+                <span style={{ fontSize: 13, color: 'var(--text-sub)', fontWeight: 600 }}>
+                  Page {page} of {pages}
+                </span>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={page >= pages}
+                  onClick={() => setPage(page + 1)}
+                >
+                  <span>Next</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </>
   );
 }

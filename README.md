@@ -360,17 +360,12 @@ DocZen/
 - [ ] E-signatures on PDFs
 
 ---
-
+## Contributors: Aryan Lade, Mohammad Anas, Sayyad Rehan & Tanvir kanoje
 <div align="center">
-
-### 🧾 License
-
-Released under the **MIT License**.
 
 <br/>
 
 **Made with ❤️ using React, Express & TypeScript**
-
 ⭐ *Star this repo if DocZen made your document workflow easier!*
 
 </div>

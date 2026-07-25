@@ -3,6 +3,17 @@ import { useParams, Link, Navigate } from 'react-router-dom';
 import { api, errMessage, downloadBlob, formatBytes } from '../lib/api';
 import { toolBySlug, Tool, ToolField } from '../lib/tools';
 import Dropzone from '../components/Dropzone';
+import {
+  Sliders,
+  Play,
+  CheckCircle2,
+  Download,
+  Copy,
+  Globe,
+  AlertCircle,
+  ChevronRight,
+  ExternalLink,
+} from 'lucide-react';
 
 type Result =
   | {
@@ -21,6 +32,7 @@ type Result =
       stats: { characters: number; words: number };
     }
   | { kind: 'filelist'; message: string; files: { name: string; path: string }[] }
+  | { kind: 'wordcount'; stats: { words: number; characters: number; charactersNoSpaces: number; lines: number; sentences: number; paragraphs: number; readingTimeMin: number } }
   | { kind: 'generic'; message: string };
 
 const apiBase = (import.meta.env.VITE_API_URL as string) || '';
@@ -93,6 +105,8 @@ export default function ToolRunner() {
     if (tool.fileMode === 'multi') return files.length >= (tool.minFiles ?? 2);
     if (tool.fileMode === 'single') return files.length === 1;
     if (tool.fileMode === 'optional') return files.length === 1 || (values.text ?? '').trim().length > 0;
+    // No file — if the tool has a text field, require it
+    if (tool.fields.some((f) => f.name === 'text')) return (values.text ?? '').trim().length > 0;
     return true;
   };
 
@@ -145,6 +159,8 @@ export default function ToolRunner() {
           setResult({ kind: 'ocr', text: data.text, confidence: data.confidence, wordCount: data.wordCount });
         } else if (tool.resultKind === 'language') {
           setResult({ kind: 'language', detected: data.detected, candidates: data.candidates, stats: data.stats });
+        } else if (tool.resultKind === 'wordcount') {
+          setResult({ kind: 'wordcount', stats: data.stats });
         } else if (data.files) {
           setResult({ kind: 'filelist', message: data.message, files: data.files });
         } else {
@@ -180,9 +196,14 @@ export default function ToolRunner() {
     <>
       <div className="page-head">
         <div className="crumb">
-          <Link to="/tools">All Tools</Link> / {tool.name}
+          <Link to="/tools">All Tools</Link>
+          <ChevronRight size={14} />
+          <span>{tool.name}</span>
         </div>
-        <h1>{tool.icon} {tool.name}</h1>
+        <h1>
+          <span>{tool.icon}</span>
+          <span>{tool.name}</span>
+        </h1>
         <p>{tool.shortDesc}{tool.helpText ? ` — ${tool.helpText}` : ''}</p>
       </div>
 
@@ -197,7 +218,12 @@ export default function ToolRunner() {
             />
           )}
 
-          {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+          {error && (
+            <div className="alert alert-error" style={{ marginTop: 20 }}>
+              <AlertCircle size={18} />
+              <span>{error}</span>
+            </div>
+          )}
 
           {result && (
             <div className="result-card">
@@ -207,7 +233,10 @@ export default function ToolRunner() {
         </div>
 
         <div className="card">
-          <div className="section-title">Options</div>
+          <div className="section-title">
+            <Sliders size={18} style={{ color: 'var(--primary)' }} />
+            <span>Options &amp; Parameters</span>
+          </div>
 
           {isCompress && (
             <div className="compress-panel">
@@ -281,10 +310,11 @@ export default function ToolRunner() {
           )}
 
           {!isCompress && visibleFields.length === 0 && (
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, marginBottom: 16 }}>
-              No options needed — just upload and run.
+            <p style={{ color: 'var(--text-sub)', fontSize: 14, marginBottom: 20, lineHeight: 1.5 }}>
+              No custom options required for this tool — simply upload your file and click run below.
             </p>
           )}
+
           {visibleFields.map((f) => (
             <div className="field" key={f.name}>
               <label>{f.label}</label>
@@ -292,8 +322,18 @@ export default function ToolRunner() {
               {f.hint && <div className="hint">{f.hint}</div>}
             </div>
           ))}
-          <button className="btn btn-primary btn-block" onClick={run} disabled={!canRun()}>
-            {loading ? (<><span className="spinner" /> Processing…</>) : `Run ${tool.name}`}
+
+          <button className="btn btn-primary btn-block btn-lg" onClick={run} disabled={!canRun()}>
+            {loading ? (
+              <>
+                <span className="spinner" /> Processing…
+              </>
+            ) : (
+              <>
+                <Play size={18} fill="currentColor" />
+                <span>Run {tool.name}</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -302,6 +342,8 @@ export default function ToolRunner() {
 }
 
 function ResultView({ result }: { result: Result }) {
+  const [copied, setCopied] = useState(false);
+
   if (result.kind === 'download') {
     const hasSizes = result.originalSize != null && result.compressedSize != null;
     const saved = hasSizes ? result.originalSize! - result.compressedSize! : 0;
@@ -311,10 +353,12 @@ function ResultView({ result }: { result: Result }) {
     return (
       <div>
         <div className="result-ok">
-          <div className="r-icon">✅</div>
+          <div className="r-icon">
+            <CheckCircle2 size={24} />
+          </div>
           <div>
-            <div className="r-title">Done — download started</div>
-            <div className="r-sub">Saved as {result.filename}</div>
+            <div className="r-title">Processing Complete!</div>
+            <div className="r-sub">Your file has been downloaded as {result.filename}</div>
           </div>
         </div>
         {hasSizes && (
@@ -347,23 +391,32 @@ function ResultView({ result }: { result: Result }) {
   }
 
   if (result.kind === 'ocr') {
+    const handleCopy = () => {
+      navigator.clipboard.writeText(result.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
     return (
       <div>
         <div className="result-ok">
-          <div className="r-icon">✅</div>
+          <div className="r-icon">
+            <CheckCircle2 size={24} />
+          </div>
           <div>
-            <div className="r-title">Text extracted</div>
-            <div className="r-sub">{result.wordCount} words · {result.confidence}% confidence</div>
+            <div className="r-title">Text Extracted Successfully</div>
+            <div className="r-sub">{result.wordCount} words extracted · {result.confidence}% confidence</div>
           </div>
           <button
             className="btn btn-ghost btn-sm"
             style={{ marginLeft: 'auto' }}
-            onClick={() => navigator.clipboard.writeText(result.text)}
+            onClick={handleCopy}
           >
-            Copy
+            <Copy size={14} />
+            <span>{copied ? 'Copied!' : 'Copy Text'}</span>
           </button>
         </div>
-        <div className="ocr-box">{result.text || '(no text found)'}</div>
+        <div className="ocr-box">{result.text || '(no text detected in document)'}</div>
       </div>
     );
   }
@@ -372,7 +425,9 @@ function ResultView({ result }: { result: Result }) {
     return (
       <div>
         <div className="lang-top">
-          <div className="lt-flag">🌍</div>
+          <div className="lt-flag">
+            <Globe size={32} style={{ color: 'var(--primary)' }} />
+          </div>
           <div>
             <div className="lt-name">{result.detected.name}</div>
             <div className="lt-native">{result.detected.native}</div>
@@ -385,13 +440,49 @@ function ResultView({ result }: { result: Result }) {
         {result.candidates.map((c) => (
           <div className="cand-row" key={c.code}>
             <span className="c-name">{c.name}</span>
-            <div className="c-bar"><div style={{ width: `${c.confidence}%` }} /></div>
+            <div className="c-bar">
+              <div style={{ width: `${c.confidence}%` }} />
+            </div>
             <span className="c-val">{c.confidence}%</span>
           </div>
         ))}
-        <p style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 10 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-sub)', marginTop: 14 }}>
           Analyzed {result.stats.words} words ({result.stats.characters} characters)
         </p>
+      </div>
+    );
+  }
+
+  if (result.kind === 'wordcount') {
+    const s = result.stats;
+    const rows: [string, string | number][] = [
+      ['Words', s.words],
+      ['Characters', s.characters],
+      ['Characters (no spaces)', s.charactersNoSpaces],
+      ['Sentences', s.sentences],
+      ['Paragraphs', s.paragraphs],
+      ['Lines', s.lines],
+      ['Reading time', `~${s.readingTimeMin} min`],
+    ];
+    return (
+      <div>
+        <div className="result-ok">
+          <div className="r-icon">
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <div className="r-title">Text Analysis Complete</div>
+            <div className="r-sub">{s.words} words · {s.characters} characters</div>
+          </div>
+        </div>
+        <div className="dl-list" style={{ marginTop: 16 }}>
+          {rows.map(([label, value]) => (
+            <div className="cand-row" key={label}>
+              <span className="c-name" style={{ width: 220 }}>{label}</span>
+              <span className="c-val" style={{ width: 'auto', textAlign: 'left', fontWeight: 700 }}>{value}</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -400,10 +491,12 @@ function ResultView({ result }: { result: Result }) {
     return (
       <div>
         <div className="result-ok">
-          <div className="r-icon">✅</div>
+          <div className="r-icon">
+            <CheckCircle2 size={24} />
+          </div>
           <div>
             <div className="r-title">{result.message}</div>
-            <div className="r-sub">Click each file to download</div>
+            <div className="r-sub">Click below to download each generated file</div>
           </div>
         </div>
         <div className="dl-list">
@@ -416,7 +509,9 @@ function ResultView({ result }: { result: Result }) {
               rel="noreferrer"
               download={f.name}
             >
-              ⬇️ {f.name}
+              <Download size={16} />
+              <span>{f.name}</span>
+              <ExternalLink size={14} style={{ marginLeft: 'auto', opacity: 0.6 }} />
             </a>
           ))}
         </div>
@@ -426,8 +521,12 @@ function ResultView({ result }: { result: Result }) {
 
   return (
     <div className="result-ok">
-      <div className="r-icon">✅</div>
-      <div><div className="r-title">{result.message}</div></div>
+      <div className="r-icon">
+        <CheckCircle2 size={24} />
+      </div>
+      <div>
+        <div className="r-title">{result.message}</div>
+      </div>
     </div>
   );
 }
