@@ -42,7 +42,6 @@ app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 if (process.env.NODE_ENV !== 'test') {
     app.use((0, morgan_1.default)('dev'));
 }
-// Rate limiting
 app.use(rateLimiter_1.globalLimiter);
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
 // Health check
