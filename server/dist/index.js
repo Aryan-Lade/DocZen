@@ -44,7 +44,6 @@ if (process.env.NODE_ENV !== 'test') {
 }
 // Rate limiting
 app.use(rateLimiter_1.globalLimiter);
-// Static file serving for uploads
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
 // Health check
 app.get('/api/health', (_req, res) => {
