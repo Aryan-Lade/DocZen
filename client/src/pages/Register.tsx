@@ -1,13 +1,13 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, errMessage } from '../lib/api';
+import { errMessage } from '../lib/api';
 import AuthShell from '../components/AuthShell';
 import { UserPlus, AlertCircle } from 'lucide-react';
 
 export default function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,8 +23,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      const res = await api.post('/api/auth/register', { name, email, password });
-      login(res.data.token, res.data.user);
+      await register(name, email, password);
       navigate('/');
     } catch (err) {
       setError(await errMessage(err));

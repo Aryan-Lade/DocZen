@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   FileText,
   LayoutDashboard,
@@ -19,6 +20,8 @@ import {
   Image as ImageIcon,
   Eye,
   Shield,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 const navItems = [
@@ -42,6 +45,7 @@ const headerTools = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -137,6 +141,14 @@ export default function Layout() {
           </nav>
 
           <div className="topbar-right">
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              aria-label="Toggle theme"
+            >
+              {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+            </button>
             <div className="user-chip" onClick={() => navigate('/profile')} title="View Profile & Settings">
               <div className="avatar">{initials}</div>
               <span className="user-name">{user?.name?.split(' ')[0]}</span>
