@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { api, errMessage, downloadBlob, formatBytes } from '../lib/api';
 import { toolBySlug, Tool, ToolField } from '../lib/tools';
@@ -13,6 +13,8 @@ import {
   AlertCircle,
   ChevronRight,
   ExternalLink,
+  X,
+  FileText,
 } from 'lucide-react';
 
 type Result =
@@ -76,6 +78,7 @@ export default function ToolRunner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<Result | null>(null);
+  const [preview, setPreview] = useState<{ blob: Blob; filename: string; result: Result } | null>(null);
 
   // Compress-PDF only: how much to reduce the file by.
   const isCompress = tool?.slug === 'pdf-compress';
@@ -167,23 +170,24 @@ export default function ToolRunner() {
           setResult({ kind: 'generic', message: data.message || 'Done!' });
         }
       } else {
-        // Binary download
+        // Binary — show preview instead of auto-downloading
         const cd: string = res.headers['content-disposition'] || '';
         const match = cd.match(/filename="?([^";]+)"?/);
         const filename = match?.[1] || tool.downloadName || 'result';
-        downloadBlob(res.data as Blob, filename);
         const os = Number(res.headers['x-original-size']);
         const cs = Number(res.headers['x-compressed-size']);
         const tb = res.headers['x-target-bytes'];
         const tm = res.headers['x-target-met'];
-        setResult({
+        const downloadResult: Result = {
           kind: 'download',
           filename,
           originalSize: isFinite(os) && os > 0 ? os : undefined,
           compressedSize: isFinite(cs) && cs > 0 ? cs : undefined,
           targetBytes: tb ? Number(tb) : null,
           targetMet: tm === undefined ? undefined : tm === 'true',
-        });
+        };
+        setPreview({ blob: res.data as Blob, filename, result: downloadResult });
+        setResult(downloadResult);
       }
     } catch (err) {
       setError(await errMessage(err));
@@ -194,6 +198,15 @@ export default function ToolRunner() {
 
   return (
     <>
+      {preview && (
+        <PreviewModal
+          blob={preview.blob}
+          filename={preview.filename}
+          result={preview.result}
+          onDownload={() => { downloadBlob(preview.blob, preview.filename); }}
+          onClose={() => setPreview(null)}
+        />
+      )}
       <div className="page-head">
         <div className="crumb">
           <Link to="/tools">All Tools</Link>
@@ -338,6 +351,93 @@ export default function ToolRunner() {
         </div>
       </div>
     </>
+  );
+}
+
+function PreviewModal({
+  blob,
+  filename,
+  result,
+  onDownload,
+  onClose,
+}: {
+  blob: Blob;
+  filename: string;
+  result: Result;
+  onDownload: () => void;
+  onClose: () => void;
+}) {
+  const url = useMemo(() => URL.createObjectURL(blob), [blob]);
+  const isImage = blob.type.startsWith('image/');
+  const isPdf = blob.type === 'application/pdf';
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div
+      className="preview-overlay"
+      ref={overlayRef}
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+    >
+      <div className="preview-modal">
+        <div className="preview-header">
+          <span className="preview-title">{filename}</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="preview-body">
+          {isImage && (
+            <img src={url} alt={filename} className="preview-image" />
+          )}
+          {isPdf && (
+            <iframe src={url} title={filename} className="preview-iframe" />
+          )}
+          {!isImage && !isPdf && (
+            <div className="preview-generic">
+              <FileText size={48} style={{ color: 'var(--primary)', marginBottom: 16 }} />
+              <div className="preview-generic-name">{filename}</div>
+              <div className="preview-generic-size">{formatBytes(blob.size)}</div>
+              <p style={{ color: 'var(--text-sub)', fontSize: 14, marginTop: 8 }}>
+                Preview not available for this file type.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {result.kind === 'download' && result.originalSize != null && result.compressedSize != null && (
+          <div className="preview-stats">
+            <span>{formatBytes(result.originalSize)}</span>
+            <span className="cp-arrow">→</span>
+            <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>{formatBytes(result.compressedSize)}</span>
+            <span style={{ color: 'var(--accent-emerald)' }}>
+              ({Math.round((1 - result.compressedSize / result.originalSize) * 100)}% saved)
+            </span>
+          </div>
+        )}
+
+        <div className="preview-footer">
+          <button className="btn btn-ghost" onClick={onClose}>
+            <X size={16} /> Close
+          </button>
+          <button className="btn btn-primary" onClick={onDownload}>
+            <Download size={16} /> Download
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
