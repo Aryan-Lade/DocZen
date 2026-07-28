@@ -1437,6 +1437,114 @@ tr:hover td { background: var(--surface-subtle); }
   font-style: normal;
 }
 
+/* ================= PREVIEW MODAL ================= */
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.preview-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 860px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+  gap: 12px;
+}
+
+.preview-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-body {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-subtle);
+  min-height: 300px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  display: block;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 60vh;
+  border: none;
+  display: block;
+}
+
+.preview-generic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.preview-generic-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.preview-generic-size {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.preview-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-light);
+  font-size: 13px;
+  color: var(--text-sub);
+  background: var(--surface);
+}
+
+.preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-light);
+}
+
 /* ================= RESPONSIVE ================= */
 @media (max-width: 900px) {
   .auth-hero { display: none; }
