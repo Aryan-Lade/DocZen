@@ -43,6 +43,7 @@ The backend exposes a modular REST API (each tool is its own controller + route)
 <td width="33%" valign="top">
 
 ### 🔐 Accounts & Security
+
 - JWT authentication (30-day tokens)
 - Register / Login / Logout
 - Profile update & change password
@@ -55,6 +56,7 @@ The backend exposes a modular REST API (each tool is its own controller + route)
 <td width="33%" valign="top">
 
 ### 🗂️ File Library
+
 - Upload up to **20 files** at once
 - Personal document store (per owner)
 - Rename, download & delete files
@@ -66,6 +68,7 @@ The backend exposes a modular REST API (each tool is its own controller + route)
 <td width="33%" valign="top">
 
 ### 📊 Activity & Insights
+
 - Every operation logged
 - Success / failed / pending status
 - Operation, filename & size tracked
@@ -83,38 +86,42 @@ The backend exposes a modular REST API (each tool is its own controller + route)
 > Rendered dynamically from a central tool registry (`client/src/lib/tools.ts`) — one config drives the entire UI.
 
 ### 📄 PDF Tools
-| Tool | What it does | Endpoint |
-|------|--------------|----------|
-| 🔗 **Merge PDF** | Combine multiple PDFs into one | `POST /api/pdf/merge` |
-| ✂️ **Split PDF** | Extract page ranges, custom pages, or split every page | `POST /api/pdf/split` |
-| 🗜️ **Compress PDF** | Reduce file size (Ghostscript-backed) | `POST /api/pdf/compress` |
-| 🔒 **Protect PDF** | Add password encryption | `POST /api/pdf/protect` |
-| 🔓 **Unlock PDF** | Remove password from authorized files | `POST /api/pdf/unlock` |
-| 🔀 **Reorder Pages** | Rearrange pages into a new order | `POST /api/pdf/reorder` |
-| 🔄 **Rotate Pages** | Rotate all or selected pages (90/180/270°) | `POST /api/pdf/rotate` |
-| 💧 **Add Watermark** | Stamp positioned text watermark w/ opacity & color | `POST /api/pdf/watermark` |
-| 🔢 **Page Numbers** | Numeric or Roman numerals, any corner | `POST /api/pdf/number-pages` |
+
+| Tool                 | What it does                                           | Endpoint                     |
+| -------------------- | ------------------------------------------------------ | ---------------------------- |
+| 🔗 **Merge PDF**     | Combine multiple PDFs into one                         | `POST /api/pdf/merge`        |
+| ✂️ **Split PDF**     | Extract page ranges, custom pages, or split every page | `POST /api/pdf/split`        |
+| 🗜️ **Compress PDF**  | Reduce file size (Ghostscript-backed)                  | `POST /api/pdf/compress`     |
+| 🔒 **Protect PDF**   | Add password encryption                                | `POST /api/pdf/protect`      |
+| 🔓 **Unlock PDF**    | Remove password from authorized files                  | `POST /api/pdf/unlock`       |
+| 🔀 **Reorder Pages** | Rearrange pages into a new order                       | `POST /api/pdf/reorder`      |
+| 🔄 **Rotate Pages**  | Rotate all or selected pages (90/180/270°)             | `POST /api/pdf/rotate`       |
+| 💧 **Add Watermark** | Stamp positioned text watermark w/ opacity & color     | `POST /api/pdf/watermark`    |
+| 🔢 **Page Numbers**  | Numeric or Roman numerals, any corner                  | `POST /api/pdf/number-pages` |
 
 ### 🖼️ Image Tools
-| Tool | What it does | Endpoint |
-|------|--------------|----------|
-| 🖼️ **Compress Image** | Shrink images with quality control | `POST /api/image/compress` |
-| 🎨 **Convert Image** | JPG · PNG · WEBP · BMP · TIFF | `POST /api/image/convert` |
-| 📸 **PDF → Images** | Convert each PDF page to JPG | `POST /api/image/pdf-to-image` |
+
+| Tool                  | What it does                       | Endpoint                       |
+| --------------------- | ---------------------------------- | ------------------------------ |
+| 🖼️ **Compress Image** | Shrink images with quality control | `POST /api/image/compress`     |
+| 🎨 **Convert Image**  | JPG · PNG · WEBP · BMP · TIFF      | `POST /api/image/convert`      |
+| 📸 **PDF → Images**   | Convert each PDF page to JPG       | `POST /api/image/pdf-to-image` |
 
 ### 🔁 File Conversion
-| Tool | What it does | Endpoint |
-|------|--------------|----------|
-| 📄 **Word → PDF** | Convert `.doc` / `.docx` to PDF | `POST /api/convert/office-to-pdf` |
+
+| Tool                | What it does                                  | Endpoint                          |
+| ------------------- | --------------------------------------------- | --------------------------------- |
+| 📄 **Word → PDF**   | Convert `.doc` / `.docx` to PDF               | `POST /api/convert/office-to-pdf` |
 | 📊 **Office → PDF** | Word · Excel · PowerPoint → PDF (LibreOffice) | `POST /api/convert/office-to-pdf` |
-| 📝 **PDF → Word** | Convert PDF to editable `.docx` | `POST /api/convert/pdf-to-office` |
-| 📝 **Text → PDF** | Turn a `.txt` file into a PDF | `POST /api/convert/text-to-pdf` |
-| 🌐 **HTML → PDF** | Convert an HTML file to PDF | `POST /api/convert/html-to-pdf` |
+| 📝 **PDF → Word**   | Convert PDF to editable `.docx`               | `POST /api/convert/pdf-to-office` |
+| 📝 **Text → PDF**   | Turn a `.txt` file into a PDF                 | `POST /api/convert/text-to-pdf`   |
+| 🌐 **HTML → PDF**   | Convert an HTML file to PDF                   | `POST /api/convert/html-to-pdf`   |
 
 ### 🤖 Text & AI
-| Tool | What it does | Endpoint |
-|------|--------------|----------|
-| 👁️ **OCR — Extract Text** | Read text from images & scans (7 languages via Tesseract) | `POST /api/ocr/extract` |
+
+| Tool                      | What it does                                                | Endpoint                    |
+| ------------------------- | ----------------------------------------------------------- | --------------------------- |
+| 👁️ **OCR — Extract Text** | Read text from images & scans (7 languages via Tesseract)   | `POST /api/ocr/extract`     |
 | 🌍 **Language Detection** | Detect **180+ languages** offline from files or pasted text | `POST /api/language/detect` |
 
 ---
@@ -146,47 +153,50 @@ The backend exposes a modular REST API (each tool is its own controller + route)
 
 ### 🧩 Tech Stack
 
-| Layer | Technologies |
-|-------|-------------|
-| **Frontend** | React 18 · TypeScript · React Router 6 · Axios · Vite 5 |
-| **Backend** | Node 20 · Express 4 · TypeScript · ts-node-dev |
-| **Database** | MySQL · Sequelize ORM |
+| Layer               | Technologies                                                            |
+| ------------------- | ----------------------------------------------------------------------- |
+| **Frontend**        | React 18 · TypeScript · React Router 6 · Axios · Vite 5                 |
+| **Backend**         | Node 20 · Express 4 · TypeScript · ts-node-dev                          |
+| **Database**        | MySQL · Sequelize ORM                                                   |
 | **Auth & Security** | JWT · bcryptjs · Helmet · CORS · express-rate-limit · express-validator |
-| **Documents** | pdf-lib · pdf-parse · mammoth · docx · sharp · tesseract.js · franc |
-| **Uploads** | Multer (disk storage, UUID filenames, 100 MB limit) |
-| **DevOps** | Docker (multi-stage) · Railway-ready · morgan logging |
+| **Documents**       | pdf-lib · pdf-parse · mammoth · docx · sharp · tesseract.js · franc     |
+| **Uploads**         | Multer (disk storage, UUID filenames, 100 MB limit)                     |
+| **DevOps**          | Docker (multi-stage) · Railway-ready · morgan logging                   |
 
 ---
 
 ## 🛡️ Built-in Security
 
-| Protection | Detail |
-|-----------|--------|
-| 🔑 **JWT auth** | Bearer tokens, 30-day expiry, protected routes via `protect` middleware |
-| 🔒 **Password hashing** | `bcrypt` with 12 salt rounds, excluded from queries by default scope |
-| 🚦 **Rate limiting** | Global (200 / 15 min) · Auth (20 / 15 min) · Uploads (50 / 10 min) |
-| 🪖 **Helmet** | Secure HTTP headers with cross-origin resource policy |
-| ✅ **Validation** | `express-validator` on auth & inputs |
-| 📁 **Upload filtering** | MIME allow-list + 100 MB per-file cap |
-| 🌐 **CORS** | Locked to configured client origin with credentials |
+| Protection              | Detail                                                                  |
+| ----------------------- | ----------------------------------------------------------------------- |
+| 🔑 **JWT auth**         | Bearer tokens, 30-day expiry, protected routes via `protect` middleware |
+| 🔒 **Password hashing** | `bcrypt` with 12 salt rounds, excluded from queries by default scope    |
+| 🚦 **Rate limiting**    | Global (200 / 15 min) · Auth (20 / 15 min) · Uploads (50 / 10 min)      |
+| 🪖 **Helmet**           | Secure HTTP headers with cross-origin resource policy                   |
+| ✅ **Validation**       | `express-validator` on auth & inputs                                    |
+| 📁 **Upload filtering** | MIME allow-list + 100 MB per-file cap                                   |
+| 🌐 **CORS**             | Locked to configured client origin with credentials                     |
 
 ---
 
 ## 🚀 Getting Started
 
 ### ✅ Prerequisites
+
 - **Node.js 20+** and **npm**
 - **MySQL** database (local or hosted, e.g. Railway)
-- *(Optional)* **LibreOffice** → Office/Word to PDF conversion
-- *(Optional)* **Ghostscript** → advanced PDF compression & PDF-to-image
+- _(Optional)_ **LibreOffice** → Office/Word to PDF conversion
+- _(Optional)_ **Ghostscript** → advanced PDF compression & PDF-to-image
 
 ### 1️⃣ Clone
+
 ```bash
 git clone <your-repo-url>
 cd DocZen
 ```
 
 ### 2️⃣ Backend
+
 ```bash
 cd server
 cp .env.example .env          # then fill in DB + JWT values
@@ -195,6 +205,7 @@ npm run dev                    # http://localhost:5000
 ```
 
 ### 3️⃣ Frontend
+
 ```bash
 cd client
 cp .env.example .env           # leave VITE_API_URL empty for local dev
@@ -205,6 +216,7 @@ npm run dev                    # http://localhost:5173
 > 💡 In development, Vite proxies `/api` → `http://localhost:5000`, so no CORS setup is needed locally.
 
 ### 🩺 Health check
+
 ```bash
 curl http://localhost:5000/api/health
 # { "success": true, "message": "DocFusion API is running", ... }
@@ -242,6 +254,7 @@ CLIENT_URL=http://localhost:5173
 LIBREOFFICE_PATH=libreoffice
 GHOSTSCRIPT_PATH=gs
 ```
+
 </details>
 
 <details>
@@ -252,6 +265,7 @@ GHOSTSCRIPT_PATH=gs
 # In production, point to your backend:
 VITE_API_URL=
 ```
+
 </details>
 
 ---
@@ -275,40 +289,43 @@ docker run -p 5000:5000 --env-file .env doczen-server
 <details>
 <summary><b>🔐 Auth — <code>/api/auth</code></b></summary>
 
-| Method | Route | Description | Auth |
-|--------|-------|-------------|:----:|
-| `POST` | `/register` | Create account | – |
-| `POST` | `/login` | Log in, receive JWT | – |
-| `GET`  | `/me` | Current user | ✅ |
-| `PUT`  | `/profile` | Update profile | ✅ |
-| `PUT`  | `/change-password` | Change password | ✅ |
-| `POST` | `/forgot-password` | Request reset | – |
-| `PUT`  | `/reset-password/:token` | Reset password | – |
-| `DELETE` | `/account` | Delete account | ✅ |
+| Method   | Route                    | Description         | Auth |
+| -------- | ------------------------ | ------------------- | :--: |
+| `POST`   | `/register`              | Create account      |  –   |
+| `POST`   | `/login`                 | Log in, receive JWT |  –   |
+| `GET`    | `/me`                    | Current user        |  ✅  |
+| `PUT`    | `/profile`               | Update profile      |  ✅  |
+| `PUT`    | `/change-password`       | Change password     |  ✅  |
+| `POST`   | `/forgot-password`       | Request reset       |  –   |
+| `PUT`    | `/reset-password/:token` | Reset password      |  –   |
+| `DELETE` | `/account`               | Delete account      |  ✅  |
+
 </details>
 
 <details>
 <summary><b>🗂️ Files — <code>/api/files</code></b> · <b>📊 Activity — <code>/api/activity</code></b></summary>
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| `GET`  | `/files/stats` | Storage & usage stats |
-| `POST` | `/files/upload` | Upload up to 20 files |
-| `GET`  | `/files` | List documents |
-| `GET`  | `/files/:id` | Get one document |
-| `PUT`  | `/files/:id/rename` | Rename |
-| `DELETE` | `/files/:id` | Delete |
-| `GET`  | `/files/:id/download` | Download |
-| `GET`  | `/activity` | List activity log |
-| `DELETE` | `/activity` | Clear activity log |
+| Method   | Route                 | Description           |
+| -------- | --------------------- | --------------------- |
+| `GET`    | `/files/stats`        | Storage & usage stats |
+| `POST`   | `/files/upload`       | Upload up to 20 files |
+| `GET`    | `/files`              | List documents        |
+| `GET`    | `/files/:id`          | Get one document      |
+| `PUT`    | `/files/:id/rename`   | Rename                |
+| `DELETE` | `/files/:id`          | Delete                |
+| `GET`    | `/files/:id/download` | Download              |
+| `GET`    | `/activity`           | List activity log     |
+| `DELETE` | `/activity`           | Clear activity log    |
 
-*All file & activity routes require authentication.*
+_All file & activity routes require authentication._
+
 </details>
 
 <details>
 <summary><b>🧰 Tools — <code>/api/pdf</code> · <code>/api/image</code> · <code>/api/convert</code> · <code>/api/ocr</code> · <code>/api/language</code></b></summary>
 
 See the [Toolbox tables](#-the-toolbox--25-tools) above — every tool maps to one endpoint. All tool routes require authentication and are upload-rate-limited.
+
 </details>
 
 ---
@@ -341,13 +358,13 @@ DocZen/
 
 ## 🗺️ Data Models
 
-| Model | Key Fields |
-|-------|-----------|
-| 👤 **User** | `name`, `email`, `password` (hashed), `role`, `storageUsed`, `storageLimit`, reset-token fields |
+| Model           | Key Fields                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| 👤 **User**     | `name`, `email`, `password` (hashed), `role`, `storageUsed`, `storageLimit`, reset-token fields        |
 | 📄 **Document** | `ownerId`, `originalName`, `fileName`, `filePath`, `mimeType`, `size`, `category`, `tags`, `isDeleted` |
-| 📝 **Activity** | `userId`, `operation`, `fileName`, `status`, `details`, `fileSize` |
+| 📝 **Activity** | `userId`, `operation`, `fileName`, `status`, `details`, `fileSize`                                     |
 
-*Relationships:* a **User** has many **Documents** and **Activities** (cascade on delete).
+_Relationships:_ a **User** has many **Documents** and **Activities** (cascade on delete).
 
 ---
 
@@ -360,12 +377,14 @@ DocZen/
 - [ ] E-signatures on PDFs
 
 ---
-## Contributors: Aryan Lade, Mohammad Anas, Sayyad Rehan & Tanvir kanoje
+
+## Developers: Aryan Lade, Mohammad Anas, Sayyad Rehan & Tanvir kanoje
+
 <div align="center">
 
 <br/>
 
 **Made with ❤️ using React, Express & TypeScript**
-⭐ *Star this repo if DocZen made your document workflow easier!*
+⭐ _Star this repo if DocZen made your document workflow easier!_
 
 </div>
