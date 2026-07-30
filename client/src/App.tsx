@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
+import CursorCircle from './components/CursorCircle';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -19,7 +20,9 @@ function Protected({ children }: { children: JSX.Element }) {
 export default function App() {
   const { token } = useAuth();
   return (
-    <Routes>
+    <>
+      <CursorCircle />
+      <Routes>
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={token ? <Navigate to="/" replace /> : <Register />} />
       <Route
@@ -39,5 +42,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

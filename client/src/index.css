@@ -115,6 +115,54 @@
   box-sizing: border-box;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  html, body, a, button, input, select, textarea, label,
+  [role='button'], .tool-card, .pill, .user-chip, .dropzone, .dd-item, tr {
+    cursor: none !important;
+  }
+}
+
+.cursor-dot {
+  position: fixed;
+  top: -4px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  pointer-events: none;
+  z-index: 99999;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cursor-ring {
+  position: fixed;
+  top: -18px;
+  left: -18px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+  z-index: 99998;
+  opacity: 0;
+  transition: opacity 0.2s ease, width 0.25s ease, height 0.25s ease, top 0.25s ease, left 0.25s ease, background-color 0.25s ease;
+}
+
+.cursor-ring.cursor-ring-hover {
+  width: 56px;
+  height: 56px;
+  top: -28px;
+  left: -28px;
+  background: rgba(217, 119, 6, 0.12);
+  border-color: var(--primary-hover);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .cursor-dot, .cursor-ring { display: none; }
+}
+
 html, body, #root {
   min-height: 100%;
 }
