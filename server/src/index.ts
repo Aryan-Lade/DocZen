@@ -18,6 +18,8 @@ import convertRoutes from './routes/convert';
 import activityRoutes from './routes/activity';
 import languageRoutes from './routes/language';
 import utilsRoutes from './routes/utils';
+import shareRoutes from './routes/shares';
+import folderRoutes from './routes/folders';
 
 dotenv.config();
 
@@ -71,6 +73,8 @@ app.use('/api/convert', convertRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/language', languageRoutes);
 app.use('/api/utils', utilsRoutes);
+app.use('/api/shares', shareRoutes);
+app.use('/api/folders', folderRoutes);
 
 // Error Handling
 app.use(notFound);

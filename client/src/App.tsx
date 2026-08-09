@@ -9,6 +9,7 @@ import ToolRunner from './pages/ToolRunner';
 import Files from './pages/Files';
 import Activity from './pages/Activity';
 import Profile from './pages/Profile';
+import ShareAccess from './pages/ShareAccess';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { token } = useAuth();
@@ -22,6 +23,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={token ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/share/:token" element={<ShareAccess />} />
       <Route
         path="/"
         element={
