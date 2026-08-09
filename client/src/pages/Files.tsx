@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errMessage, downloadBlob, formatBytes, formatDate } from '../lib/api';
 import {
   FileText,
-  Search,
   Download,
   Trash2,
   Edit3,
@@ -13,6 +12,7 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react';
+import SearchBar from '../components/SearchBar';
 
 interface Doc {
   id: number;
@@ -172,28 +172,15 @@ export default function Files() {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="toolbar" style={{ borderBottom: 'none', padding: 0 }}>
-          <div style={{ position: 'relative', minWidth: 260, flex: 1 }}>
-            <Search
-              size={18}
-              style={{
-                position: 'absolute',
-                left: 14,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-sub)',
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Search documents by title…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              style={{ paddingLeft: 42, width: '100%' }}
-            />
-          </div>
+          <SearchBar
+            value={search}
+            onChange={(val) => {
+              setSearch(val);
+              setPage(1);
+            }}
+            placeholder="Search documents by title…"
+            minWidth={260}
+          />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Filter size={16} style={{ color: 'var(--text-sub)' }} />

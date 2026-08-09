@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TOOLS, CATEGORIES, Tool } from '../lib/tools';
-import { Search, Filter } from 'lucide-react';
+import { Filter } from 'lucide-react';
+import SearchBar from '../components/SearchBar';
 
 export default function Tools() {
   const [query, setQuery] = useState('');
@@ -28,25 +29,12 @@ export default function Tools() {
       </div>
 
       <div className="toolbar">
-        <div style={{ position: 'relative', minWidth: 280, flex: 1 }}>
-          <Search
-            size={18}
-            style={{
-              position: 'absolute',
-              left: 14,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-sub)',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Search 17+ tools… (e.g. merge, split, watermark, ocr)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{ paddingLeft: 42, width: '100%' }}
-          />
-        </div>
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder="Search 17+ tools… (e.g. merge, split, watermark, ocr)"
+        />
+
 
         <div className="cat-pills">
           <button
