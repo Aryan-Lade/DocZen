@@ -13,6 +13,7 @@ export interface IDocumentAttributes {
   category: 'pdf' | 'image' | 'word' | 'excel' | 'ppt' | 'text' | 'other';
   tags?: string[];
   isDeleted?: boolean;
+  folderId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -28,6 +29,7 @@ export class Document extends Model<IDocumentAttributes> implements IDocumentAtt
   public category!: 'pdf' | 'image' | 'word' | 'excel' | 'ppt' | 'text' | 'other';
   public tags!: string[];
   public isDeleted!: boolean;
+  public folderId!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -95,6 +97,15 @@ Document.init(
       allowNull: false,
       defaultValue: false,
     },
+    folderId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'folders',
+        key: 'id',
+      },
+      onDelete: 'SET NULL',
+    },
   },
   {
     sequelize,
@@ -107,5 +118,9 @@ Document.init(
 // Define associations
 User.hasMany(Document, { foreignKey: 'ownerId', as: 'documents' });
 Document.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+
+import Folder from './Folder';
+Folder.hasMany(Document, { foreignKey: 'folderId', as: 'documents' });
+Document.belongsTo(Folder, { foreignKey: 'folderId', as: 'folder' });
 
 export default Document;

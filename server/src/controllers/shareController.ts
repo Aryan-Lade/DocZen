@@ -1,0 +1,214 @@
+import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import { Share } from '../models/Share';
+import { Document } from '../models/Document';
+import { User } from '../models/User';
+import { AuthRequest } from '../middlewares/auth';
+import { createError } from '../middlewares/error';
+
+// @desc  Create a secure share link for a document
+// @route POST /api/shares/create
+export const createShare = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { documentId, password, expiresInHours, downloadLimit } = req.body;
+
+    const doc = await Document.findOne({
+      where: { id: documentId, ownerId: req.user.id, isDeleted: false },
+    });
+
+    if (!doc) {
+      return next(createError('Document not found', 404));
+    }
+
+    // Generate unique token
+    const token = crypto.randomBytes(16).toString('hex');
+
+    let expiresAt: Date | null = null;
+    if (expiresInHours) {
+      expiresAt = new Date(Date.now() + parseFloat(expiresInHours) * 60 * 60 * 1000);
+    }
+
+    let hashedPassword = null;
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    }
+
+    const share = await Share.create({
+      documentId,
+      ownerId: req.user.id,
+      token,
+      password: hashedPassword,
+      expiresAt,
+      downloadLimit: downloadLimit ? parseInt(downloadLimit) : null,
+      downloadCount: 0,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Share link created successfully',
+      share: {
+        id: share.id,
+        token: share.token,
+        expiresAt: share.expiresAt,
+        downloadLimit: share.downloadLimit,
+        isPasswordProtected: !!password,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Get info about a share link (Public)
+// @route GET /api/shares/info/:token
+export const getShareInfo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { token } = req.params;
+
+    const share = await Share.findOne({
+      where: { token },
+      include: [
+        {
+          model: Document,
+          as: 'document',
+          where: { isDeleted: false },
+          attributes: ['originalName', 'size', 'mimeType', 'category'],
+        },
+        {
+          model: User,
+          as: 'owner',
+          attributes: ['name'],
+        },
+      ],
+    });
+
+    if (!share) {
+      return next(createError('Share link not found or has been removed', 404));
+    }
+
+    // Check if expired
+    const isExpired = share.expiresAt ? new Date() > new Date(share.expiresAt) : false;
+
+    // Check download limit
+    const isLimitReached = share.downloadLimit ? share.downloadCount >= share.downloadLimit : false;
+
+    res.json({
+      success: true,
+      share: {
+        originalName: share.document.originalName,
+        size: share.document.size,
+        mimeType: share.document.mimeType,
+        category: share.document.category,
+        ownerName: (share as any).owner?.name || 'DocZen User',
+        isPasswordProtected: !!share.password,
+        isExpired,
+        isLimitReached,
+        expiresAt: share.expiresAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Download shared file
+// @route GET /api/shares/download/:token
+export const downloadSharedFile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { token } = req.params;
+    const { password } = req.query;
+
+    const share = await Share.findOne({
+      where: { token },
+      include: [
+        {
+          model: Document,
+          as: 'document',
+          where: { isDeleted: false },
+        },
+      ],
+    });
+
+    if (!share) {
+      return next(createError('Share link not found or has been removed', 404));
+    }
+
+    // Validate expiration
+    if (share.expiresAt && new Date() > new Date(share.expiresAt)) {
+      return next(createError('This share link has expired', 410));
+    }
+
+    // Validate download limit
+    if (share.downloadLimit && share.downloadCount >= share.downloadLimit) {
+      return next(createError('This share link has reached its download limit', 410));
+    }
+
+    // Validate password if set
+    if (share.password) {
+      if (!password) {
+        return next(createError('Password passcode is required to access this file', 401));
+      }
+      const match = await bcrypt.compare(password as string, share.password);
+      if (!match) {
+        return next(createError('Invalid password passcode', 403));
+      }
+    }
+
+    const doc = share.document;
+    if (!fs.existsSync(doc.filePath)) {
+      return next(createError('File not found on disk', 404));
+    }
+
+    // Increment download count
+    await share.increment('downloadCount');
+
+    res.download(doc.filePath, doc.originalName);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Get all share links generated by user
+// @route GET /api/shares/my-shares
+export const getMyShares = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const shares = await Share.findAll({
+      where: { ownerId: req.user.id },
+      include: [
+        {
+          model: Document,
+          as: 'document',
+          attributes: ['originalName', 'size', 'category', 'isDeleted'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    res.json({ success: true, shares });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Revoke / delete a share link
+// @route DELETE /api/shares/:id
+export const revokeShare = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const share = await Share.findOne({
+      where: { id: req.params.id, ownerId: req.user.id },
+    });
+
+    if (!share) {
+      return next(createError('Share link not found', 404));
+    }
+
+    await share.destroy();
+
+    res.json({ success: true, message: 'Share link successfully revoked' });
+  } catch (error) {
+    next(error);
+  }
+};

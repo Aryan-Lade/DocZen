@@ -30,6 +30,7 @@ export const uploadFile = async (req: AuthRequest, res: Response, next: NextFunc
 
     const savedDocs = [];
     let totalSize = 0;
+    const { folderId } = req.body;
 
     for (const file of files) {
       const doc = await DocumentModel.create({
@@ -42,6 +43,7 @@ export const uploadFile = async (req: AuthRequest, res: Response, next: NextFunc
         category: getMimeCategory(file.mimetype),
         tags: [],
         isDeleted: false,
+        folderId: folderId || null,
       });
 
       savedDocs.push(doc);
@@ -72,7 +74,7 @@ export const uploadFile = async (req: AuthRequest, res: Response, next: NextFunc
 // @route GET /api/files
 export const getFiles = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { search, category, sort = '-createdAt', page = 1, limit = 20 } = req.query;
+    const { search, category, folderId, sort = '-createdAt', page = 1, limit = 20 } = req.query;
 
     const whereClause: any = { ownerId: req.user.id, isDeleted: false };
     if (search) {
@@ -80,6 +82,9 @@ export const getFiles = async (req: AuthRequest, res: Response, next: NextFuncti
     }
     if (category) {
       whereClause.category = category;
+    }
+    if (folderId !== undefined) {
+      whereClause.folderId = folderId === 'root' || folderId === 'null' ? null : folderId;
     }
 
     let sortField = 'createdAt';
